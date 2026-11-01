@@ -1,0 +1,111 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Dudas\StateMachine;
+
+use BackedEnum;
+use Dudas\StateMachine\Contracts\StateMachine;
+use Dudas\StateMachine\Contracts\StateStore;
+use Dudas\StateMachine\Exception\GuardRejectedException;
+use Dudas\StateMachine\Exception\TransitionNotAllowedException;
+use Dudas\StateMachine\Exception\UnknownEventException;
+use Dudas\StateMachine\Exception\UnknownStateException;
+use Dudas\StateMachine\Store\InMemoryStore;
+
+/**
+ * Runtime instance of a {@see Definition}. The current state lives in a {@see StateStore},
+ * so the machine can drive an in-memory value or state owned by a domain object.
+ *
+ * Sending an event runs: guards → `before` hooks → store write → `after` hooks.
+ * A failing guard or `before` hook leaves the state untouched; a failing `after` hook
+ * does not roll the state back.
+ */
+final class Machine implements StateMachine
+{
+    public string $state {
+        get => $this->store->get();
+    }
+
+    private readonly StateStore $store;
+
+    /**
+     * @throws UnknownStateException when the store holds a state the definition doesn't know
+     */
+    public function __construct(
+        public readonly Definition $definition,
+        ?StateStore $store = null,
+    ) {
+        $this->store = $store ?? new InMemoryStore($definition->initial);
+
+        if (!$definition->hasState($this->state)) {
+            throw UnknownStateException::named($this->state);
+        }
+    }
+
+    public function is(string|BackedEnum ...$states): bool
+    {
+        return in_array($this->state, Name::listOf($states), true);
+    }
+
+    public function can(string|BackedEnum $event, array $payload = []): bool
+    {
+        return $this->select(Name::of($event), $payload) !== null;
+    }
+
+    public function availableEvents(array $payload = []): array
+    {
+        return array_values(array_filter(
+            $this->definition->events(),
+            fn(string $event): bool => $this->select($event, $payload) !== null,
+        ));
+    }
+
+    public function send(string|BackedEnum $event, array $payload = []): static
+    {
+        $event = Name::of($event);
+        $from = $this->state;
+
+        if (!$this->definition->hasEvent($event)) {
+            throw UnknownEventException::named($event);
+        }
+
+        $transition = $this->select($event, $payload);
+
+        if ($transition === null) {
+            throw array_any(
+                $this->definition->transitionsFor($event),
+                static fn(Transition $t): bool => $t->leavesFrom($from),
+            )
+                ? GuardRejectedException::forEvent($event, $from)
+                : TransitionNotAllowedException::fromState($event, $from);
+        }
+
+        $context = $transition->contextFor($from, $payload);
+
+        foreach ($transition->before as $hook) {
+            $hook->handle($context);
+        }
+
+        $this->store->set($transition->to);
+
+        foreach ($transition->after as $hook) {
+            $hook->handle($context);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function select(string $event, array $payload): ?Transition
+    {
+        $from = $this->state;
+
+        return array_find(
+            $this->definition->transitionsFor($event),
+            static fn(Transition $t): bool => $t->permits($from, $payload),
+        );
+    }
+}

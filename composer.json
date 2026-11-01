@@ -1,0 +1,44 @@
+{
+    "name": "nandordudas/state-machine",
+    "description": "A small, strictly typed finite state machine for PHP (inspired by xstate.js and mouadziani/xstate)",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "state machine",
+        "fsm",
+        "workflow",
+        "xstate"
+    ],
+    "require": {
+        "php": ">=8.5"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.0",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Dudas\\StateMachine\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Dudas\\StateMachine\\Tests\\": "tests/",
+            "Dudas\\StateMachine\\Examples\\": "examples/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse",
+        "format": "php-cs-fixer fix --allow-risky=yes",
+        "check": [
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}
