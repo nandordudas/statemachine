@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Store;
 
 use Closure;
+use Dudas\StateMachine\Name;
 use Dudas\StateMachine\Contracts\StateStore;
 
 /**
@@ -15,14 +16,14 @@ use Dudas\StateMachine\Contracts\StateStore;
 final readonly class CallbackStore implements StateStore
 {
     /**
-     * @param Closure(): string $reader
+     * @param Closure(): (string|\BackedEnum) $reader
      * @param Closure(string): mixed $writer
      */
     public function __construct(private Closure $reader, private Closure $writer) {}
 
     public function get(): string
     {
-        return ($this->reader)();
+        return Name::of(($this->reader)());
     }
 
     public function set(string $state): void

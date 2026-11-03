@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 use BackedEnum;
-use Closure;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
@@ -28,19 +27,28 @@ final readonly class Transition
 
     public string $to;
 
+    /** @var list<Guard> */
+    public array $guards;
+
+    /** @var list<Hook> */
+    public array $before;
+
+    /** @var list<Hook> */
+    public array $after;
+
     /**
      * @param string|BackedEnum|non-empty-list<string|BackedEnum> $from
-     * @param list<Guard> $guards all must allow the transition
-     * @param list<Hook> $before run before the state changes; throwing aborts the transition
-     * @param list<Hook> $after run once the new state is stored
+     * @param list<Guard|callable(TransitionContext): bool> $guards all must allow the transition
+     * @param list<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
+     * @param list<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
      */
     public function __construct(
         string|BackedEnum $event,
         string|BackedEnum|array $from,
         string|BackedEnum $to,
-        public array $guards = [],
-        public array $before = [],
-        public array $after = [],
+        array $guards = [],
+        array $before = [],
+        array $after = [],
     ) {
         $this->event = Name::of($event);
         $this->to = Name::of($to);
@@ -51,6 +59,19 @@ final readonly class Transition
         }
 
         $this->from = $sources;
+        $this->guards = array_map(static fn(Guard|callable $g): Guard => self::wrapGuard($g), array_values($guards));
+        $this->before = array_map(static fn(Hook|callable $h): Hook => self::wrapHook($h), array_values($before));
+        $this->after = array_map(static fn(Hook|callable $h): Hook => self::wrapHook($h), array_values($after));
+    }
+
+    private static function wrapGuard(Guard|callable $guard): Guard
+    {
+        return $guard instanceof Guard ? $guard : new ClosureGuard($guard(...));
+    }
+
+    private static function wrapHook(Hook|callable $hook): Hook
+    {
+        return $hook instanceof Hook ? $hook : new ClosureHook($hook(...));
     }
 
     /**
@@ -67,7 +88,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withGuard(Guard|callable $guard): self
     {
-        return clone($this, ['guards' => [...$this->guards, $guard instanceof Guard ? $guard : new ClosureGuard(Closure::fromCallable($guard))]]);
+        return clone($this, ['guards' => [...$this->guards, self::wrapGuard($guard)]]);
     }
 
     /**
@@ -76,7 +97,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withBefore(Hook|callable $hook): self
     {
-        return clone($this, ['before' => [...$this->before, $hook instanceof Hook ? $hook : new ClosureHook(Closure::fromCallable($hook))]]);
+        return clone($this, ['before' => [...$this->before, self::wrapHook($hook)]]);
     }
 
     /**
@@ -85,7 +106,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withAfter(Hook|callable $hook): self
     {
-        return clone($this, ['after' => [...$this->after, $hook instanceof Hook ? $hook : new ClosureHook(Closure::fromCallable($hook))]]);
+        return clone($this, ['after' => [...$this->after, self::wrapHook($hook)]]);
     }
 
     public function leavesFrom(string $state): bool

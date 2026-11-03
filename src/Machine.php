@@ -50,14 +50,16 @@ final class Machine implements StateMachine
 
     public function can(string|BackedEnum $event, array $payload = []): bool
     {
-        return $this->select(Name::of($event), $payload) !== null;
+        return $this->select(Name::of($event), $this->state, $payload) !== null;
     }
 
     public function availableEvents(array $payload = []): array
     {
+        $from = $this->state;
+
         return array_values(array_filter(
             $this->definition->events(),
-            fn(string $event): bool => $this->select($event, $payload) !== null,
+            fn(string $event): bool => $this->select($event, $from, $payload) !== null,
         ));
     }
 
@@ -70,7 +72,7 @@ final class Machine implements StateMachine
             throw UnknownEventException::named($event);
         }
 
-        $transition = $this->select($event, $payload);
+        $transition = $this->select($event, $from, $payload);
 
         if ($transition === null) {
             throw array_any(
@@ -87,6 +89,11 @@ final class Machine implements StateMachine
             $hook->handle($context);
         }
 
+        // A `before` hook may have sent another event; don't overwrite that with a stale transition.
+        if ($this->state !== $from) {
+            throw TransitionNotAllowedException::fromState($event, $this->state);
+        }
+
         $this->store->set($transition->to);
 
         foreach ($transition->after as $hook) {
@@ -99,10 +106,8 @@ final class Machine implements StateMachine
     /**
      * @param array<string, mixed> $payload
      */
-    private function select(string $event, array $payload): ?Transition
+    private function select(string $event, string $from, array $payload): ?Transition
     {
-        $from = $this->state;
-
         return array_find(
             $this->definition->transitionsFor($event),
             static fn(Transition $t): bool => $t->permits($from, $payload),
