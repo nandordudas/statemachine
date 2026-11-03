@@ -60,4 +60,18 @@ final class DefinitionTest extends VideoTestCase
 
         new Definition('a', [], []);
     }
+
+    public function testRejectsEmptyStateName(): void
+    {
+        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
+
+        new Definition('', [''], []);
+    }
+
+    public function testRejectsNonTransitionElements(): void
+    {
+        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
+
+        new Definition('a', ['a'], ['oops']);
+    }
 }

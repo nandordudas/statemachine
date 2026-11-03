@@ -77,4 +77,11 @@ final class TransitionTest extends TestCase
         self::assertTrue($transition->permits('a', ['ok' => true]));
         self::assertEquals(new TransitionContext('E', 'a', 'b', ['ok' => true]), $seen);
     }
+
+    public function testConstructorWrapsClosures(): void
+    {
+        $transition = new Transition('GO', 'a', 'b', guards: [static fn(): bool => false]);
+
+        self::assertFalse($transition->permits('a'));
+    }
 }

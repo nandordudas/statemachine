@@ -14,7 +14,7 @@ final class Name
 {
     public static function of(string|BackedEnum $value): string
     {
-        return (string) ($value instanceof BackedEnum ? $value->value : $value);
+        return $value instanceof BackedEnum ? (string) $value->value : $value;
     }
 
     /**

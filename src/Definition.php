@@ -24,6 +24,9 @@ final readonly class Definition
     /** @var list<Transition> */
     public array $transitions;
 
+    /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
+    private array $byEvent;
+
     /**
      * @param string|BackedEnum $initial
      * @param list<string|BackedEnum> $states
@@ -38,11 +41,21 @@ final readonly class Definition
             throw new InvalidDefinitionException('A definition needs at least one state.');
         }
 
+        if (in_array('', $known, true)) {
+            throw new InvalidDefinitionException('State names must not be empty.');
+        }
+
         if (!in_array($initial, $known, true)) {
             throw new InvalidDefinitionException(sprintf('Initial state "%s" is not a declared state.', $initial));
         }
 
+        $transitions = array_values($transitions);
+
         foreach ($transitions as $transition) {
+            if (!$transition instanceof Transition) {
+                throw new InvalidDefinitionException(sprintf('Transitions must be instances of %s.', Transition::class));
+            }
+
             foreach ([...$transition->from, $transition->to] as $state) {
                 if (!in_array($state, $known, true)) {
                     throw new InvalidDefinitionException(sprintf(
@@ -57,6 +70,12 @@ final readonly class Definition
         $this->initial = $initial;
         $this->states = $known;
         $this->transitions = $transitions;
+
+        $byEvent = [];
+        foreach ($transitions as $transition) {
+            $byEvent[$transition->event][] = $transition;
+        }
+        $this->byEvent = $byEvent;
     }
 
     public static function builder(): DefinitionBuilder
@@ -74,12 +93,12 @@ final readonly class Definition
      */
     public function events(): array
     {
-        return array_values(array_unique(array_map(static fn(Transition $t): string => $t->event, $this->transitions)));
+        return array_map(strval(...), array_keys($this->byEvent));
     }
 
     public function hasEvent(string $event): bool
     {
-        return array_any($this->transitions, static fn(Transition $t): bool => $t->event === $event);
+        return isset($this->byEvent[$event]);
     }
 
     /**
@@ -87,6 +106,6 @@ final readonly class Definition
      */
     public function transitionsFor(string $event): array
     {
-        return array_values(array_filter($this->transitions, static fn(Transition $t): bool => $t->event === $event));
+        return $this->byEvent[$event] ?? [];
     }
 }

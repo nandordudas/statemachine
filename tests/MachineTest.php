@@ -196,4 +196,25 @@ final class MachineTest extends VideoTestCase
 
         new Machine($this->video(), new InMemoryStore('ghost'));
     }
+
+    public function testNestedSendFromBeforeHookDoesNotOverwriteState(): void
+    {
+        $machine = null;
+        $definition = $this->video(extra: [
+            Transition::on('FORCE_PAUSE', 'stopped', 'paused'),
+            Transition::on('GO', 'stopped', 'playing')
+                ->withBefore(static function () use (&$machine): void {
+                    $machine->send('FORCE_PAUSE');
+                }),
+        ]);
+        $machine = new Machine($definition);
+
+        try {
+            $machine->send('GO');
+            self::fail('Expected the stale transition to be rejected.');
+        } catch (TransitionNotAllowedException) {
+        }
+
+        self::assertSame('paused', $machine->state);
+    }
 }
