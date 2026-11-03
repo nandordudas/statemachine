@@ -35,6 +35,28 @@ $video->can('PLAY');       // false
 - Exceptions all implement `StateMachineException`; an invalid event/state (`TransitionNotAllowedException`)
   is distinct from a guard veto (`GuardRejectedException`, a subclass).
 
+## Semantics
+
+`send()` runs: select transition (guards) → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
+`onEnter`/`onExit` are per-state hooks registered on the builder (`->onEnter('playing', fn ($c) => ...)`).
+
+| Situation | Result |
+|---|---|
+| Unknown event | `UnknownEventException` |
+| No transition from the current state | `TransitionNotAllowedException` |
+| Transition exists but every guard vetoes | `GuardRejectedException` |
+| `before` or `onExit` hook throws | transition aborted, state unchanged, exception propagates |
+| State changed during `before` hooks (nested `send`) | `ConcurrentTransitionException`, stale transition not applied |
+| `onEnter`/`after` hook throws | state is already changed and is **not** rolled back; wrapped in `AfterHookFailedException` (original in `getPrevious()`, context in `->context`) |
+| Store holds an unknown or missing state | `UnknownStateException` |
+
+Stores shared between writers should implement `AtomicStateStore` (`compareAndSet($expected, $new)`;
+`InMemoryStore` and `AtomicCallbackStore` do). The machine then refuses a write that lost the race
+with `ConcurrentTransitionException`; plain stores only get the check made before the write.
+
+States and events must be strings or **string-backed** enums; int-backed enums are rejected.
+Guards may run twice (`can()` then `send()`), so keep them side-effect free.
+
 ## Differences from xstate (mouadziani)
 
 - Guards receive a `TransitionContext` (event, from, to, payload) instead of `($from, $to)`.

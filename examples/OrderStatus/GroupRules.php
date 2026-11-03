@@ -38,6 +38,8 @@ final class GroupRules
             return true;
         }
 
+        // Same-group moves, including a status to itself, are allowed on purpose: this mirrors
+        // StatusObserverService, and LegacyOrderStatusRule pins it for every pair.
         if ($from->group() === $to->group()) {
             return true;
         }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 use BackedEnum;
+use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
 /**
  * States and events are plain strings internally; backed enums are accepted
@@ -14,7 +15,15 @@ final class Name
 {
     public static function of(string|BackedEnum $value): string
     {
-        return $value instanceof BackedEnum ? (string) $value->value : $value;
+        if (!$value instanceof BackedEnum) {
+            return $value;
+        }
+
+        if (!is_string($value->value)) {
+            throw new InvalidDefinitionException(sprintf('%s is int-backed; only string-backed enums can name states and events.', $value::class));
+        }
+
+        return $value->value;
     }
 
     /**

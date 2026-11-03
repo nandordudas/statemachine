@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Store;
 
 use Closure;
+use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Name;
 use Dudas\StateMachine\Contracts\StateStore;
 
@@ -16,14 +17,16 @@ use Dudas\StateMachine\Contracts\StateStore;
 final readonly class CallbackStore implements StateStore
 {
     /**
-     * @param Closure(): (string|\BackedEnum) $reader
+     * @param Closure(): (string|\BackedEnum|null) $reader
      * @param Closure(string): mixed $writer
      */
     public function __construct(private Closure $reader, private Closure $writer) {}
 
     public function get(): string
     {
-        return Name::of(($this->reader)());
+        $state = ($this->reader)();
+
+        return $state === null ? throw UnknownStateException::missing() : Name::of($state);
     }
 
     public function set(string $state): void
