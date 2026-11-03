@@ -5,21 +5,25 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 use BackedEnum;
+use Dudas\StateMachine\Contracts\AtomicStateStore;
 use Dudas\StateMachine\Contracts\StateMachine;
 use Dudas\StateMachine\Contracts\StateStore;
+use Dudas\StateMachine\Exception\AfterHookFailedException;
+use Dudas\StateMachine\Exception\ConcurrentTransitionException;
 use Dudas\StateMachine\Exception\GuardRejectedException;
 use Dudas\StateMachine\Exception\TransitionNotAllowedException;
 use Dudas\StateMachine\Exception\UnknownEventException;
 use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Store\InMemoryStore;
+use Throwable;
 
 /**
  * Runtime instance of a {@see Definition}. The current state lives in a {@see StateStore},
  * so the machine can drive an in-memory value or state owned by a domain object.
  *
- * Sending an event runs: guards → `before` hooks → store write → `after` hooks.
- * A failing guard or `before` hook leaves the state untouched; a failing `after` hook
- * does not roll the state back.
+ * Sending an event runs: guards → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
+ * A failing guard, `before` or `onExit` hook leaves the state untouched. A failing `onEnter`/`after` hook
+ * does not roll the state back and surfaces as {@see AfterHookFailedException}.
  */
 final class Machine implements StateMachine
 {
@@ -85,22 +89,39 @@ final class Machine implements StateMachine
 
         $context = $transition->contextFor($from, $payload);
 
-        foreach ($transition->before as $hook) {
+        foreach ([...$transition->before, ...$this->definition->exitHooksFor($from)] as $hook) {
             $hook->handle($context);
         }
 
-        // A `before` hook may have sent another event; don't overwrite that with a stale transition.
+        // A `before`/exit hook may have sent another event; don't overwrite that with a stale transition.
         if ($this->state !== $from) {
-            throw TransitionNotAllowedException::fromState($event, $this->state);
+            throw ConcurrentTransitionException::forEvent($event, $from, $this->state);
         }
 
-        $this->store->set($transition->to);
+        $this->write($event, $from, $transition->to);
 
-        foreach ($transition->after as $hook) {
-            $hook->handle($context);
+        try {
+            foreach ([...$this->definition->enterHooksFor($transition->to), ...$transition->after] as $hook) {
+                $hook->handle($context);
+            }
+        } catch (Throwable $e) {
+            throw new AfterHookFailedException($context, $e);
         }
 
         return $this;
+    }
+
+    private function write(string $event, string $from, string $to): void
+    {
+        if ($this->store instanceof AtomicStateStore) {
+            if (!$this->store->compareAndSet($from, $to)) {
+                throw ConcurrentTransitionException::forEvent($event, $from, $this->store->get());
+            }
+
+            return;
+        }
+
+        $this->store->set($to);
     }
 
     /**

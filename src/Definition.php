@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 use BackedEnum;
+use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
 /**
@@ -27,12 +28,20 @@ final readonly class Definition
     /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
     private array $byEvent;
 
+    /** @var array<string, list<Hook>> run after the machine has entered the state */
+    private array $onEnter;
+
+    /** @var array<string, list<Hook>> run before the machine leaves the state */
+    private array $onExit;
+
     /**
      * @param string|BackedEnum $initial
      * @param list<string|BackedEnum> $states
      * @param list<Transition> $transitions
+     * @param array<string, list<Hook>> $onEnter hooks by state name
+     * @param array<string, list<Hook>> $onExit hooks by state name
      */
-    public function __construct(string|BackedEnum $initial, array $states, array $transitions)
+    public function __construct(string|BackedEnum $initial, array $states, array $transitions, array $onEnter = [], array $onExit = [])
     {
         $initial = Name::of($initial);
         $known = Name::listOf($states);
@@ -67,6 +76,16 @@ final readonly class Definition
             }
         }
 
+        foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
+            foreach (array_keys($byState) as $state) {
+                if (!in_array((string) $state, $known, true)) {
+                    throw new InvalidDefinitionException(sprintf('%s hook refers to undeclared state "%s".', $kind, $state));
+                }
+            }
+        }
+
+        $this->onEnter = $onEnter;
+        $this->onExit = $onExit;
         $this->initial = $initial;
         $this->states = $known;
         $this->transitions = $transitions;
@@ -107,5 +126,21 @@ final readonly class Definition
     public function transitionsFor(string $event): array
     {
         return $this->byEvent[$event] ?? [];
+    }
+
+    /**
+     * @return list<Hook>
+     */
+    public function enterHooksFor(string $state): array
+    {
+        return $this->onEnter[$state] ?? [];
+    }
+
+    /**
+     * @return list<Hook>
+     */
+    public function exitHooksFor(string $state): array
+    {
+        return $this->onExit[$state] ?? [];
     }
 }

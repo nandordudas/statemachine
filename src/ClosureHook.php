@@ -14,6 +14,11 @@ final readonly class ClosureHook implements Hook
      */
     public function __construct(private Closure $callback) {}
 
+    public static function wrap(Hook|callable $hook): Hook
+    {
+        return $hook instanceof Hook ? $hook : new self($hook(...));
+    }
+
     public function handle(TransitionContext $context): void
     {
         ($this->callback)($context);

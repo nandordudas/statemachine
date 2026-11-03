@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 use BackedEnum;
+use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
 /**
@@ -25,6 +26,12 @@ final class DefinitionBuilder
 
     /** @var list<Transition> */
     private array $transitions = [];
+
+    /** @var array<string, list<Hook>> */
+    private array $onEnter = [];
+
+    /** @var array<string, list<Hook>> */
+    private array $onExit = [];
 
     public function initial(string|BackedEnum $state): self
     {
@@ -47,12 +54,43 @@ final class DefinitionBuilder
         return $this;
     }
 
+    /**
+     * Hooks run once the machine has entered `$state`: state written → enter hooks → transition `after` hooks.
+     * A failure is wrapped in AfterHookFailedException.
+     *
+     * @param Hook|callable(TransitionContext): mixed ...$hooks
+     */
+    public function onEnter(string|BackedEnum $state, Hook|callable ...$hooks): self
+    {
+        foreach ($hooks as $hook) {
+            $this->onEnter[Name::of($state)][] = ClosureHook::wrap($hook);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Hooks run before the machine leaves `$state`, after the transition's `before` hooks; throwing aborts the transition.
+     *
+     * @param Hook|callable(TransitionContext): mixed ...$hooks
+     */
+    public function onExit(string|BackedEnum $state, Hook|callable ...$hooks): self
+    {
+        foreach ($hooks as $hook) {
+            $this->onExit[Name::of($state)][] = ClosureHook::wrap($hook);
+        }
+
+        return $this;
+    }
+
     public function build(): Definition
     {
         return new Definition(
             $this->initial ?? throw new InvalidDefinitionException('An initial state is required.'),
             $this->states,
             $this->transitions,
+            $this->onEnter,
+            $this->onExit,
         );
     }
 }
