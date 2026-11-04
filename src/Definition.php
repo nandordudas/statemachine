@@ -218,11 +218,7 @@ final readonly class Definition
      */
     public function unreachableStates(): array
     {
-        $reached = [];
-
-        foreach ($this->shortestPaths() as $state => $_events) {
-            $reached[$state] = true;
-        }
+        $reached = iterator_to_array($this->shortestPaths());
 
         return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
