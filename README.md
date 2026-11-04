@@ -1,8 +1,8 @@
 # state-machine (PHP 7.2 port)
 
-A small, strictly typed finite state machine for **PHP 7.2+**. This is the `php72` branch / package
-`nandordudas/state-machine-php72`: a hand-port of the PHP 8.5 library on `main`
-(`nandordudas/state-machine`), with the same concepts and nearly the same API.
+A small, strictly typed finite state machine for **PHP 7.2+**. This is the `php72` branch, the `1.x` line of
+`nandordudas/state-machine`: a hand-port of the PHP 8.5 library on `main` (`2.x`), with the same concepts and
+nearly the same API.
 
 Differences from the PHP 8.5 version: states and events are plain **strings** (no enums), the state is
 `$machine->state()` (also readable as `$machine->state`), there are no named arguments, and value-object properties
@@ -10,27 +10,30 @@ are `@readonly` by convention instead of enforced.
 
 ## Installation
 
-| Your PHP | Package |
-|---|---|
-| 7.2 to 8.4 | `nandordudas/state-machine-php72` (this package) |
-| 8.5+ | [`nandordudas/state-machine`](https://github.com/nandordudas/statemachine) (enums, named arguments) |
+One Composer package, two version lines:
+
+| Version | PHP | Branch | API |
+|---|---|---|---|
+| `1.x` | 7.2 and up | `php72` (this one) | plain-string states and events |
+| `2.x` | 8.5 and up | `main` | backed enums, named arguments |
 
 ```bash
-composer require nandordudas/state-machine-php72
+composer require nandordudas/state-machine
 ```
 
-Both packages use the `Dudas\StateMachine` namespace, so install only one; this package declares a `conflict` with
-the other. Until it is on Packagist, require it from the repository:
+Composer picks the newest version your PHP can run: 2.x on PHP 8.5+, 1.x on PHP 7.2 to 8.4. To force this line on
+a newer PHP, require `^1.0`. Until a `1.x` tag exists, use the branch:
+`composer require nandordudas/state-machine:dev-php72`.
+
+For a private fork, add a VCS repository and give Composer a read-only token
+(`composer config --global github-oauth.github.com <token>`):
 
 ```json
 {
-  "repositories": [{ "type": "vcs", "url": "https://github.com/nandordudas/state-machine-php72" }],
-  "require": { "nandordudas/state-machine-php72": "dev-main" }
+  "repositories": [{ "type": "vcs", "url": "https://github.com/nandordudas/statemachine" }],
+  "require": { "nandordudas/state-machine": "dev-php72" }
 }
 ```
-
-(or a `path` repository to a local checkout). For a private repository give Composer a read-only token:
-`composer config --global github-oauth.github.com <token>`.
 
 ## Quick start
 
@@ -120,8 +123,8 @@ Stores shared between writers should implement `AtomicStateStore` (`compareAndSe
 
 ## Contributing
 
-Code must stay valid PHP 7.2 (see `AGENTS.md`). Features land in the PHP 8.5 package first and are hand-ported here;
-keep the two in step and tag them with the same version.
+Code must stay valid PHP 7.2 (see `AGENTS.md`). Features land on `main` (2.x) first and are hand-ported here;
+keep the two in step: a feature released as `2.Y.0` ships here as `1.Y.0`.
 
 ## Develop
 
