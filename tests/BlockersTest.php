@@ -46,14 +46,14 @@ final class BlockersTest extends TestCase
 
     public function testBecauseExplainsAGuard(): void
     {
-        $machine = $this->approval(on(
-            'APPROVE',
-            'review',
-            'published',
-            guard: because(payloadIs('role', 'approver'), 'Only approvers can approve.', 'not_approver', [
+        $machine = $this->approval(on('APPROVE', 'review', 'published', guard: because(
+            payloadIs('role', 'approver'),
+            'Only approvers can approve.',
+            'not_approver',
+            [
                 'role' => 'approver',
-            ]),
-        ));
+            ],
+        )));
 
         $blockers = $machine->blockers('APPROVE', ['role' => 'editor']);
 
@@ -71,7 +71,7 @@ final class BlockersTest extends TestCase
             'published',
             guard: because(
                 static fn(TransitionContext $c): bool => ($c->payload['amount'] ?? 0) <= 100,
-                static fn(TransitionContext $c): string => sprintf('%d is over 100.', $c->payload['amount']),
+                static fn(TransitionContext $c): string => json_encode($c->payload['amount'] ?? null) . ' is over 100.',
             ),
         ));
 
@@ -81,11 +81,16 @@ final class BlockersTest extends TestCase
 
     public function testAllOfListsEveryFailingGuardNotOnlyTheFirst(): void
     {
-        $machine = $this->approval(on('APPROVE', 'review', 'published', guard: allOf(
-            because(payloadIs('role', 'approver'), 'Needs the approver role.', 'role'),
-            because(payloadIs('signed', true), 'Needs a signature.', 'signature'),
-            because(payloadIs('paid', true), 'Needs payment.', 'payment'),
-        )));
+        $machine = $this->approval(on(
+            'APPROVE',
+            'review',
+            'published',
+            guard: allOf(
+                because(payloadIs('role', 'approver'), 'Needs the approver role.', 'role'),
+                because(payloadIs('signed', true), 'Needs a signature.', 'signature'),
+                because(payloadIs('paid', true), 'Needs payment.', 'payment'),
+            ),
+        ));
 
         self::assertSame(['role', 'signature'], self::codes($machine->blockers('APPROVE', ['paid' => true])));
     }
@@ -168,14 +173,13 @@ final class BlockersTest extends TestCase
     public function testExplainingGuardsMustNotSendEither(): void
     {
         $ref = new MachineRef();
-        $ref->machine = $this->approval(on('APPROVE', 'review', 'published', guard: because(
-            static function () use ($ref): bool {
-                $ref->get()->send('APPROVE');
+        $ref->machine = $this->approval(on('APPROVE', 'review', 'published', guard: because(static function () use (
+            $ref,
+        ): bool {
+            $ref->get()->send('APPROVE');
 
-                return false;
-            },
-            'never shown',
-        )));
+            return false;
+        }, 'never shown')));
 
         $this->expectException(ConcurrentTransitionException::class);
 

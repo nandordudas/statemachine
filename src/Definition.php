@@ -112,11 +112,7 @@ final readonly class Definition
         foreach ($byStateName as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
                 if (!isset($index[$state])) {
-                    throw new InvalidDefinitionException(sprintf(
-                        '%s refers to undeclared state "%s".',
-                        $kind,
-                        $state,
-                    ));
+                    throw new InvalidDefinitionException(sprintf('%s refers to undeclared state "%s".', $kind, $state));
                 }
             }
         }

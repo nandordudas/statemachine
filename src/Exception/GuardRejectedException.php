@@ -23,10 +23,12 @@ final class GuardRejectedException extends TransitionNotAllowedException
         $message = sprintf('Guard rejected event "%s" in state "%s".', $event, $from);
 
         if ($blockers !== []) {
-            $message .= ' ' . implode(' ', array_unique(array_map(
-                static fn(Blocker $blocker): string => $blocker->message,
-                $blockers,
-            )));
+            $message .=
+                ' '
+                . implode(
+                    ' ',
+                    array_unique(array_map(static fn(Blocker $blocker): string => $blocker->message, $blockers)),
+                );
         }
 
         $exception = new self($event, $from, $message);

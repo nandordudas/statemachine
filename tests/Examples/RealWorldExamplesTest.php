@@ -112,10 +112,13 @@ final class RealWorldExamplesTest extends TestCase
             array_map(static fn(Blocker $blocker): string => $blocker->message, $why),
             'the guard says which rules fail',
         );
-        self::assertSame(['Approve', 'Send back'], array_map(
-            static fn(Transition $transition): mixed => $transition->meta['label'] ?? null,
-            $flow->availableTransitions(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
-        ));
+        self::assertSame(
+            ['Approve', 'Send back'],
+            array_map(
+                static fn(Transition $transition): mixed => $transition->meta['label'] ?? null,
+                $flow->availableTransitions(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
+            ),
+        );
         self::assertSame('In review', $flow->definition->metaFor(DocumentState::Review)['label'] ?? null);
 
         $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
