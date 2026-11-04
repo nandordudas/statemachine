@@ -150,6 +150,20 @@ when a later one fails (use `stream()` to see each outcome).
 States and events must be strings or **string-backed** enums; int-backed enums are rejected.
 Guards may run twice (`can()` then `send()`), so keep them side-effect free.
 
+## Performance and memory
+
+`php bench/run.php` measures the hot paths; CI runs it for every pull request next to the base branch on the
+same runner. On a CI runner (PHP 8.5): `send()` ≈ 0.6 µs, `can()` ≈ 0.2 µs, `availableEvents()` ≈ 1.5 µs for a
+state in a 350-transition graph (only transitions leaving the current state are looked at).
+
+- Nothing accumulates per send: `tests/MemoryTest.php` repeats every path (success, refusal, hook failures,
+  chained events, fibers, atomic/locking stores) thousands of times and fails if memory grows.
+- `history: true` keeps every transition (it grows by design); use `history: N` in long-running workers.
+- A refusal costs an exception only when one is shown: `sendIfAllowed()` builds none, `tryTransition()` returns
+  one, `send()` throws one. Exception traces keep the payload alive while you hold a `TransitionResult`,
+  unless `zend.exception_ignore_args=On` (the production default).
+- Keep guards cheap: `can()`, `availableEvents()` and every send evaluate them.
+
 ## Differences from xstate (mouadziani)
 
 - Guards receive a `TransitionContext` (event, from, to, payload) instead of `($from, $to)`.
