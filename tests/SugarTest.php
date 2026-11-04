@@ -26,6 +26,9 @@ use function Dudas\StateMachine\payloadsEqual;
 
 final class SugarTest extends TestCase
 {
+    /**
+     * @param array<string, mixed> $payload
+     */
     private function context(array $payload): TransitionContext
     {
         return new TransitionContext('GO', 'a', 'b', $payload);
@@ -89,9 +92,9 @@ final class SugarTest extends TestCase
     public function testPropertyStoreHandlesStringAndPrivateProperties(): void
     {
         $entity = new class {
-            private ?string $stage = 'stopped';
+            private string $stage = 'stopped';
 
-            public function stage(): ?string
+            public function stage(): string
             {
                 return $this->stage;
             }
