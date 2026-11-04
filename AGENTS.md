@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Guidance for AI coding agents working on, or *using*, this library. This is the **PHP 7.2 port**
-(`nandordudas/state-machine-php72`, branch `php72`); the PHP 8.5 library lives on `main`.
+(branch `php72`, the `1.x` line of `nandordudas/state-machine`); the PHP 8.5 library (`2.x`) lives on `main`.
 
 ## What this is
 
@@ -50,10 +50,11 @@ hooks only. Use `AtomicStateStore` (`AtomicCallbackStore`) for state shared betw
 
 ## Packaging
 
-Published as its own Composer package, `nandordudas/state-machine-php72` (this branch is that repository's `main`);
-the PHP 8.5 package is `nandordudas/state-machine`. Both declare a `conflict` with each other. Tag releases with the
-same version as the other package. `.github/workflows/ci.yml` checks out both branches, so it only works in the
-combined repository; trim its matrix to a single job if this branch lives in its own repo.
+One Composer package, `nandordudas/state-machine`, registered on Packagist from this repository. Two version lines:
+`1.x` is this branch (`php >=7.2`), `2.x` is `main` (`php >=8.5`); Composer picks the newest one the running PHP
+supports. Do **not** add a `conflict` on `nandordudas/state-machine` (a package cannot conflict with itself and
+Packagist then skips the branch) and do not rename the package. Tag releases `v1.Y.Z` here when `main` is tagged
+`v2.Y.Z`.
 
 ## Commands
 
