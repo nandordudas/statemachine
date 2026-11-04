@@ -119,8 +119,25 @@ Guards may run twice (`can()` then `send()`), so keep them side-effect free.
 interface property (`public string $state { get; }`), `array_find`/`array_any`/`array_all`,
 `readonly` classes, first-class callable syntax.
 
+## PHP 7.2
+
+A hand-port without enums lives on branch `php72` (package `nandordudas/state-machine-php72`).
+
 ## Develop
 
 ```
 composer install && composer check   # phpstan (max) + phpunit
+mago fmt --check && mago lint && mago analyze   # Mago: config in mago.toml
 ```
+
+## Editor and agent setup
+
+- `.vscode/`: recommended extensions (Intelephense, Mago, PHPStan, PHPUnit test explorer, Xdebug, EditorConfig, TOML),
+  format-on-save with Mago, and tasks for `composer check` and the Mago commands. `.editorconfig` sets 4-space PHP.
+- `AGENTS.md` (and `CLAUDE.md` importing it): conventions and API cheat sheet for AI coding agents.
+- `.claude/skills/state-machine/`: a Claude skill that teaches modelling workflows with this library.
+
+## CI
+
+`.github/workflows/ci.yml` builds and verifies both packages (`main` on PHP 8.5, `php72` on PHP 7.2) with Mago,
+PHPStan and PHPUnit, and uploads each package as a `composer archive` zip artifact.
