@@ -25,6 +25,9 @@ final readonly class Definition
     /** @var list<Transition> */
     public array $transitions;
 
+    /** @var list<string> */
+    private array $eventNames;
+
     /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
     private array $byEvent;
 
@@ -84,17 +87,41 @@ final readonly class Definition
             }
         }
 
-        $this->onEnter = $onEnter;
-        $this->onExit = $onExit;
+        $this->onEnter = self::normalizeHooks($onEnter);
+        $this->onExit = self::normalizeHooks($onExit);
         $this->initial = $initial;
         $this->states = $known;
         $this->transitions = $transitions;
 
         $byEvent = [];
+        $names = [];
         foreach ($transitions as $transition) {
             $byEvent[$transition->event][] = $transition;
+            $names[$transition->event] = true;
         }
         $this->byEvent = $byEvent;
+        $this->eventNames = array_map(strval(...), array_keys($names));
+    }
+
+    /**
+     * @param array<string, iterable<Hook|callable>> $byState
+     * @return array<string, list<Hook>>
+     */
+    private static function normalizeHooks(array $byState): array
+    {
+        $normalized = [];
+
+        foreach ($byState as $state => $hooks) {
+            if (!is_iterable($hooks)) {
+                throw new InvalidDefinitionException(sprintf('State hooks for "%s" must be a list of hooks.', $state));
+            }
+
+            foreach ($hooks as $hook) {
+                $normalized[(string) $state][] = ClosureHook::wrap($hook);
+            }
+        }
+
+        return $normalized;
     }
 
     public static function builder(): DefinitionBuilder
@@ -112,7 +139,7 @@ final readonly class Definition
      */
     public function events(): array
     {
-        return array_map(strval(...), array_keys($this->byEvent));
+        return $this->eventNames;
     }
 
     public function hasEvent(string $event): bool

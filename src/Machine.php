@@ -15,7 +15,7 @@ use Dudas\StateMachine\Exception\TransitionNotAllowedException;
 use Dudas\StateMachine\Exception\UnknownEventException;
 use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Store\InMemoryStore;
-use Throwable;
+use Exception;
 
 /**
  * Runtime instance of a {@see Definition}. The current state lives in a {@see StateStore},
@@ -32,6 +32,9 @@ final class Machine implements StateMachine
     }
 
     private readonly StateStore $store;
+
+    /** True while `before`/`onExit` hooks run; a nested send() then could only race with this one. */
+    private bool $inPreHooks = false;
 
     /**
      * @throws UnknownStateException when the store holds a state the definition doesn't know
@@ -70,7 +73,16 @@ final class Machine implements StateMachine
     public function send(string|BackedEnum $event, array $payload = []): static
     {
         $event = Name::of($event);
+
+        if ($this->inPreHooks) {
+            throw ConcurrentTransitionException::nestedSend($event);
+        }
+
         $from = $this->state;
+
+        if (!$this->definition->hasState($from)) {
+            throw UnknownStateException::named($from);
+        }
 
         if (!$this->definition->hasEvent($event)) {
             throw UnknownEventException::named($event);
@@ -89,11 +101,17 @@ final class Machine implements StateMachine
 
         $context = $transition->contextFor($from, $payload);
 
-        foreach ([...$transition->before, ...$this->definition->exitHooksFor($from)] as $hook) {
-            $hook->handle($context);
+        $this->inPreHooks = true;
+
+        try {
+            foreach ([...$transition->before, ...$this->definition->exitHooksFor($from)] as $hook) {
+                $hook->handle($context);
+            }
+        } finally {
+            $this->inPreHooks = false;
         }
 
-        // A `before`/exit hook may have sent another event; don't overwrite that with a stale transition.
+        // Another writer may have changed the state meanwhile; don't overwrite it with a stale transition.
         if ($this->state !== $from) {
             throw ConcurrentTransitionException::forEvent($event, $from, $this->state);
         }
@@ -104,7 +122,7 @@ final class Machine implements StateMachine
             foreach ([...$this->definition->enterHooksFor($transition->to), ...$transition->after] as $hook) {
                 $hook->handle($context);
             }
-        } catch (Throwable $e) {
+        } catch (Exception $e) { // Errors are bugs, not hook failures: let them propagate
             throw new AfterHookFailedException($context, $e);
         }
 

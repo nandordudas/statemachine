@@ -14,6 +14,11 @@ final readonly class ClosureGuard implements Guard
      */
     public function __construct(private Closure $callback) {}
 
+    public static function wrap(Guard|callable $guard): Guard
+    {
+        return $guard instanceof Guard ? $guard : new self($guard(...));
+    }
+
     public function allows(TransitionContext $context): bool
     {
         return ($this->callback)($context);
