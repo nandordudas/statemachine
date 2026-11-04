@@ -10,7 +10,7 @@ use Dudas\StateMachine\Contracts\Guard;
 final readonly class ClosureGuard implements Guard
 {
     /**
-     * @param Closure(TransitionContext): bool $callback
+     * @param Closure(TransitionContext): mixed $callback
      */
     public function __construct(
         private Closure $callback,
@@ -18,11 +18,11 @@ final readonly class ClosureGuard implements Guard
 
     public static function wrap(Guard|callable $guard): Guard
     {
-        return $guard instanceof Guard ? $guard : new self($guard(...));
+        return $guard instanceof Guard ? $guard : new self(Closure::fromCallable($guard));
     }
 
     public function allows(TransitionContext $context): bool
     {
-        return ($this->callback)($context);
+        return (bool) ($this->callback)($context);
     }
 }
