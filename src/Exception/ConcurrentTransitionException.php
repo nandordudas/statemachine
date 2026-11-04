@@ -18,7 +18,7 @@ final class ConcurrentTransitionException extends LogicException implements Stat
             'Event "%s" was selected in state "%s" but the machine is now in "%s".',
             $event,
             $expected,
-            $actual,
+            $actual
         ));
     }
 
@@ -26,7 +26,7 @@ final class ConcurrentTransitionException extends LogicException implements Stat
     {
         return new self(sprintf(
             'Event "%s" was sent from a `before`/`onExit` hook; send events from `onEnter`/`after` hooks instead.',
-            $event,
+            $event
         ));
     }
 
@@ -35,7 +35,7 @@ final class ConcurrentTransitionException extends LogicException implements Stat
         return new self(sprintf(
             'Could not move from "%s" to "%s": the stored state changed concurrently.',
             $expected,
-            $state,
+            $state
         ));
     }
 }

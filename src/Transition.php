@@ -51,13 +51,13 @@ final class Transition
         string $to,
         array $guards = [],
         array $before = [],
-        array $after = [],
+        array $after = []
     ) {
         $sources = Name::listOf($from);
 
         if ($event === '' || $to === '' || $sources === [] || in_array('', $sources, true)) {
             throw new InvalidDefinitionException(
-                'A transition needs a non-empty event, source state(s) and target state.',
+                'A transition needs a non-empty event, source state(s) and target state.'
             );
         }
 

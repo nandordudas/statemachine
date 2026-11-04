@@ -86,7 +86,7 @@ final class DefinitionTest extends VideoTestCase
     {
         $definition = Definition::fromTable('draft', [
             ['SUBMIT', 'draft', 'review'],
-            ['ARCHIVE', ['review', 'published'], 'archived'],
+            ['ARCHIVE', ['review', 'published'], 'archived']
         ]);
 
         self::assertSame(['draft', 'review', 'published', 'archived'], $definition->states);
@@ -102,7 +102,7 @@ final class DefinitionTest extends VideoTestCase
                 Transition::on('SUBMIT', 'draft', 'in review'),
                 Transition::on('REJECT', 'in review', 'draft')->withGuard(static function (): bool {
                     return true;
-                }),
+                })
             )
             ->build();
 

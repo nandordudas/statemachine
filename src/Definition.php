@@ -48,7 +48,7 @@ final class Definition
         array $states,
         array $transitions,
         array $onEnter = [],
-        array $onExit = [],
+        array $onExit = []
     ) {
         $known = Name::listOf($states);
 
@@ -70,7 +70,7 @@ final class Definition
             if (!$transition instanceof Transition) {
                 throw new InvalidDefinitionException(sprintf(
                     'Transitions must be instances of %s.',
-                    Transition::class,
+                    Transition::class
                 ));
             }
 
@@ -79,7 +79,7 @@ final class Definition
                     throw new InvalidDefinitionException(sprintf(
                         'Transition "%s" refers to undeclared state "%s".',
                         $transition->event,
-                        $state,
+                        $state
                     ));
                 }
             }
@@ -91,7 +91,7 @@ final class Definition
                     throw new InvalidDefinitionException(sprintf(
                         '%s hook refers to undeclared state "%s".',
                         $kind,
-                        $state,
+                        $state
                     ));
                 }
             }

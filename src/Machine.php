@@ -99,7 +99,7 @@ final class Machine implements StateMachine
 
         return array_values(array_filter($this->definition->events(), function (string $event) use (
             $from,
-            $payload,
+            $payload
         ): bool {
             return $this->select($event, $from, $payload) !== null;
         }));
@@ -198,7 +198,7 @@ final class Machine implements StateMachine
         }
 
         $leavesFromHere = Support::any($this->definition->transitionsFor($event), static function (Transition $t) use (
-            $from,
+            $from
         ): bool {
             return $t->leavesFrom($from);
         });
@@ -265,7 +265,7 @@ final class Machine implements StateMachine
     {
         $found = Support::find($this->definition->transitionsFor($event), static function (Transition $t) use (
             $from,
-            $payload,
+            $payload
         ): bool {
             return $t->permits($from, $payload);
         });
