@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "kellymears.vscode-mago",
+    "swordev.phpstan",
+    "recca0120.vscode-phpunit",
+    "xdebug.php-debug",
+    "tamasfe.even-better-toml",
+    "EditorConfig.EditorConfig"
+  ],
+  "unwantedRecommendations": [
+    "DEVSENSE.phptools-vscode"
+  ]
+}
