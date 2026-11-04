@@ -41,11 +41,12 @@ final class RunToCompletionTest extends TestCase
                 $log[] = 'enter:c';
             })
             ->transition(
-                Transition::on('GO', 'a', 'b')->withAfter(
-                    static function (TransitionContext $c) use ($ref, &$log): void {
-                        $log[] = "after:GO sees {$ref->get()->state}, context to {$c->to}";
-                    },
-                ),
+                Transition::on('GO', 'a', 'b')->withAfter(static function (TransitionContext $c) use (
+                    $ref,
+                    &$log,
+                ): void {
+                    $log[] = "after:GO sees {$ref->get()->state}, context to {$c->to}";
+                }),
                 Transition::on('NEXT', 'b', 'c'),
             )
             ->build();
@@ -53,12 +54,15 @@ final class RunToCompletionTest extends TestCase
 
         $result = $ref->get()->tryTransition('GO');
 
-        self::assertSame([
-            'enter:b#1 sees b',
-            'enter:b#2 sees b',
-            'after:GO sees b, context to b',
-            'enter:c',
-        ], $log);
+        self::assertSame(
+            [
+                'enter:b#1 sees b',
+                'enter:b#2 sees b',
+                'after:GO sees b, context to b',
+                'enter:c',
+            ],
+            $log,
+        );
         self::assertSame('b', $result->state, 'the result describes this transition, not the chained one');
         self::assertSame('GO', $result->context?->event);
         self::assertSame('c', $ref->get()->state);
@@ -182,13 +186,11 @@ final class RunToCompletionTest extends TestCase
         $definition = Definition::builder()
             ->initial('a')
             ->states('a', 'b')
-            ->transition(
-                Transition::on('GO', 'a', 'b')->withGuard(static function () use ($ref): bool {
-                    $ref->get()->send('GO');
+            ->transition(Transition::on('GO', 'a', 'b')->withGuard(static function () use ($ref): bool {
+                $ref->get()->send('GO');
 
-                    return true;
-                }),
-            )
+                return true;
+            }))
             ->build();
         $ref->machine = new Machine($definition);
 
@@ -221,10 +223,11 @@ final class RunToCompletionTest extends TestCase
 
     public function testHistoryCanKeepOnlyTheLatestTransitions(): void
     {
-        $machine = new Machine(
-            Definition::fromTable('a', [['GO', 'a', 'b'], ['GO', 'b', 'c'], ['GO', 'c', 'a']]),
-            recordHistory: 2,
-        );
+        $machine = new Machine(Definition::fromTable('a', [
+            ['GO', 'a', 'b'],
+            ['GO', 'b', 'c'],
+            ['GO', 'c', 'a'],
+        ]), recordHistory: 2);
 
         $machine->sendAll(['GO', 'GO', 'GO']);
 

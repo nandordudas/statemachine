@@ -64,9 +64,6 @@ final class Machine implements StateMachine
     /** @var list<array{string, array<string, mixed>, bool}> events sent from hooks: [event, payload, lenient] */
     private array $queue = [];
 
-    /** @var array{Transition, TransitionContext}|null the transition whose `before` hooks have started */
-    private ?array $started = null;
-
     /** @var list<TransitionContext> */
     private array $history = [];
 
@@ -82,7 +79,7 @@ final class Machine implements StateMachine
         private readonly bool|int $recordHistory = false,
         private readonly int $maxChainedEvents = 100,
     ) {
-        if ((is_int($recordHistory) && $recordHistory < 0) || $maxChainedEvents < 0) {
+        if (is_int($recordHistory) && $recordHistory < 0 || $maxChainedEvents < 0) {
             throw new InvalidDefinitionException('History size and chained event limit must not be negative.');
         }
 
@@ -250,7 +247,6 @@ final class Machine implements StateMachine
             $this->phase = self::IDLE;
             $this->owner = 0;
             $this->queue = [];
-            $this->started = null;
         }
     }
 
@@ -263,24 +259,22 @@ final class Machine implements StateMachine
     private function step(string $event, array $payload, bool $lenient): TransitionResult
     {
         $this->phase = self::PREPARING;
-        $this->started = null;
+        $attempt = new Attempt();
 
         try {
-            $prepared = $this->inTransaction(fn(): TransitionContext|array => $this->prepare($event, $payload));
+            $refused = $this->inTransaction(fn(): ?array => $this->prepare($event, $payload, $attempt));
         } catch (Throwable $e) {
-            if ($this->started !== null) {
-                [$transition, $context] = $this->started;
-
-                foreach ($transition->abort as $hook) {
-                    $hook->handle($context);
+            if ($attempt->transition !== null && $attempt->context !== null) {
+                foreach ($attempt->transition->abort as $hook) {
+                    $hook->handle($attempt->context);
                 }
             }
 
             throw $e;
         }
 
-        if (is_array($prepared)) {
-            [$from, $refusal] = $prepared;
+        if ($refused !== null) {
+            [$from, $refusal] = $refused;
 
             if ($lenient) {
                 return TransitionResult::refused($from, $refusal);
@@ -289,15 +283,21 @@ final class Machine implements StateMachine
             throw $refusal;
         }
 
-        $transition = $this->started[0] ?? throw new LogicException('A prepared transition must have started.');
+        $transition = $attempt->transition;
+        $context = $attempt->context;
+
+        if ($transition === null || $context === null) {
+            throw new LogicException('A transition that was not refused must have been applied.');
+        }
+
         $this->phase = self::FINISHING;
-        $this->record($prepared);
+        $this->record($context);
 
         $failures = [];
 
-        foreach ([...$this->definition->enterHooksFor($prepared->to), ...$transition->after] as $hook) {
+        foreach ([...$this->definition->enterHooksFor($context->to), ...$transition->after] as $hook) {
             try {
-                $hook->handle($prepared);
+                $hook->handle($context);
             } catch (Exception $e) { // Errors are bugs, not hook failures: let them propagate
                 $failures[] = $e;
             }
@@ -306,18 +306,21 @@ final class Machine implements StateMachine
         if ($failures !== []) {
             $this->queue = [];
 
-            throw new AfterHookFailedException($prepared, $failures[0], $failures);
+            throw new AfterHookFailedException($context, $failures[0], $failures);
         }
 
-        return TransitionResult::succeeded($prepared->to, $prepared);
+        return TransitionResult::succeeded($context->to, $context);
     }
 
     /**
+     * Selects the transition, runs `before`/`onExit` hooks and writes the new state, recording progress
+     * in `$attempt`.
+     *
      * @param array<string, mixed> $payload
-     * @return TransitionContext|array{string, UnknownEventException|TransitionNotAllowedException} the applied
-     *         transition, or the state and the refusal
+     * @return array{string, UnknownEventException|TransitionNotAllowedException}|null the state and the refusal,
+     *         or null once the new state is written
      */
-    private function prepare(string $event, array $payload): TransitionContext|array
+    private function prepare(string $event, array $payload, Attempt $attempt): ?array
     {
         $from = $this->store->get();
 
@@ -332,7 +335,8 @@ final class Machine implements StateMachine
         }
 
         $context = $transition->contextFor($from, $payload);
-        $this->started = [$transition, $context];
+        $attempt->transition = $transition;
+        $attempt->context = $context;
 
         foreach ([...$transition->before, ...$this->definition->exitHooksFor($from)] as $hook) {
             $hook->handle($context);
@@ -347,7 +351,7 @@ final class Machine implements StateMachine
 
         $this->write($event, $from, $transition->to);
 
-        return $context;
+        return null;
     }
 
     /**
