@@ -57,13 +57,19 @@ jobs:
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist --no-progress
 
+      # Each check runs even when an earlier one failed (the job still fails), so one run reports every problem.
       - run: mago --version
-      - run: mago fmt --check
-      - run: mago lint
-      - run: mago analyze
+      - name: mago fmt --check
+        run: mago fmt --check || { mago fmt --dry-run; exit 1; }
+      - if: ${{ !cancelled() }}
+        run: mago lint
+      - if: ${{ !cancelled() }}
+        run: mago analyze
 
-      - run: composer analyse
-      - run: composer test
+      - if: ${{ !cancelled() }}
+        run: composer analyse
+      - if: ${{ !cancelled() }}
+        run: composer test
 
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
