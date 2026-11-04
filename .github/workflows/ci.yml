@@ -71,6 +71,10 @@ jobs:
       - if: ${{ !cancelled() }}
         run: composer test
 
+      - name: Benchmark (informational)
+        if: ${{ !cancelled() && hashFiles('bench/run.php') != '' }}
+        run: php -d zend.assertions=-1 bench/run.php 100000
+
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
 
