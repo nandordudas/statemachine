@@ -14,8 +14,10 @@ use Throwable;
  */
 final class AfterHookFailedException extends RuntimeException implements StateMachineException
 {
-    public function __construct(public readonly TransitionContext $context, Throwable $previous)
-    {
+    public function __construct(
+        public readonly TransitionContext $context,
+        Throwable $previous,
+    ) {
         parent::__construct(
             sprintf(
                 'A hook failed after "%s" moved the machine from "%s" to "%s": %s',

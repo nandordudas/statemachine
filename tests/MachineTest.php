@@ -96,7 +96,9 @@ final class MachineTest extends VideoTestCase
     public function testGuardRejectionIsDistinguishedAndKeepsState(): void
     {
         $definition = $this->video(extra: [
-            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['powered'] ?? false)),
+            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(
+                static fn(TransitionContext $c): bool => (bool) ($c->payload['powered'] ?? false),
+            ),
         ]);
         $machine = new Machine($definition);
 
@@ -122,7 +124,9 @@ final class MachineTest extends VideoTestCase
             ->initial('draft')
             ->states('draft', 'review', 'published')
             ->transition(
-                Transition::on('SUBMIT', 'draft', 'published')->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['trusted'] ?? false)),
+                Transition::on('SUBMIT', 'draft', 'published')->withGuard(
+                    static fn(TransitionContext $c): bool => (bool) ($c->payload['trusted'] ?? false),
+                ),
                 Transition::on('SUBMIT', 'draft', 'review'),
             )
             ->build();
@@ -136,14 +140,18 @@ final class MachineTest extends VideoTestCase
         $log = [];
         /** @var \stdClass&object{machine: Machine} $holder */
         $holder = new \stdClass();
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withBefore(static function (TransitionContext $c) use (&$log, $holder): void {
-                $log[] = "before:{$c->from}->{$c->to}:" . $holder->machine->state;
-            })
-            ->withAfter(static function (TransitionContext $c) use (&$log, $holder): void {
-                $log[] = "after:{$c->event}:" . $holder->machine->state;
-            });
-        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
+        $transition = Transition::on(
+            'PLAY',
+            'stopped',
+            'playing',
+        )->withBefore(static function (TransitionContext $c) use (&$log, $holder): void {
+            $log[] = "before:{$c->from}->{$c->to}:" . $holder->machine->state;
+        })->withAfter(static function (TransitionContext $c) use (&$log, $holder): void {
+            $log[] = "after:{$c->event}:" . $holder->machine->state;
+        });
+        $machine = new Machine(
+            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build(),
+        );
         $holder->machine = $machine;
 
         $machine->send('PLAY');
@@ -153,9 +161,12 @@ final class MachineTest extends VideoTestCase
 
     public function testFailingBeforeHookAbortsTheTransition(): void
     {
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withBefore(static fn() => throw new \RuntimeException('nope'));
-        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
+        $transition = Transition::on('PLAY', 'stopped', 'playing')->withBefore(
+            static fn() => throw new \RuntimeException('nope'),
+        );
+        $machine = new Machine(
+            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build(),
+        );
 
         try {
             $machine->send('PLAY');
@@ -183,12 +194,12 @@ final class MachineTest extends VideoTestCase
         $order = new class {
             public string $status = 'stopped';
         };
-        $machine = new Machine(
-            $this->video(),
-            new CallbackStore(static fn(): string => $order->status, static function (string $s) use ($order): void {
+        $machine = new Machine($this->video(), new CallbackStore(
+            static fn(): string => $order->status,
+            static function (string $s) use ($order): void {
                 $order->status = $s;
-            }),
-        );
+            },
+        ));
 
         $machine->send('PLAY');
 
@@ -208,10 +219,9 @@ final class MachineTest extends VideoTestCase
         $machine = null;
         $definition = $this->video(extra: [
             Transition::on('FORCE_PAUSE', 'stopped', 'paused'),
-            Transition::on('GO', 'stopped', 'playing')
-                ->withBefore(static function () use (&$machine): void {
-                    $machine->send('FORCE_PAUSE');
-                }),
+            Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$machine): void {
+                $machine->send('FORCE_PAUSE');
+            }),
         ]);
         $machine = new Machine($definition);
 
@@ -226,9 +236,12 @@ final class MachineTest extends VideoTestCase
 
     public function testAfterHookFailureDoesNotRollBackState(): void
     {
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withAfter(static fn() => throw new \RuntimeException('late'));
-        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
+        $transition = Transition::on('PLAY', 'stopped', 'playing')->withAfter(
+            static fn() => throw new \RuntimeException('late'),
+        );
+        $machine = new Machine(
+            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build(),
+        );
 
         try {
             $machine->send('PLAY');
@@ -270,15 +283,11 @@ final class MachineTest extends VideoTestCase
             ->onEnter('playing', static function () use (&$log): void {
                 $log[] = 'enter:playing';
             })
-            ->transition(
-                Transition::on('PLAY', 'stopped', 'playing')
-                    ->withBefore(static function () use (&$log): void {
-                        $log[] = 'before';
-                    })
-                    ->withAfter(static function () use (&$log): void {
-                        $log[] = 'after';
-                    }),
-            )
+            ->transition(Transition::on('PLAY', 'stopped', 'playing')->withBefore(static function () use (&$log): void {
+                $log[] = 'before';
+            })->withAfter(static function () use (&$log): void {
+                $log[] = 'after';
+            }))
             ->build();
 
         new Machine($definition)->send('PLAY');
@@ -309,25 +318,26 @@ final class MachineTest extends VideoTestCase
     {
         $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
 
-        Definition::builder()->initial('a')->states('a')->onEnter('ghost', static fn() => null)->build();
+        Definition::builder()
+            ->initial('a')
+            ->states('a')
+            ->onEnter('ghost', static fn() => null)
+            ->build();
     }
 
     public function testAtomicStoreRefusesAWriteThatRacesWithAnotherWriter(): void
     {
         $status = 'stopped';
-        $store = new AtomicCallbackStore(
-            static function () use (&$status): string {
-                return $status;
-            },
-            static function (string $expected, string $new) use (&$status): bool {
-                if ($status !== $expected) {
-                    return false;
-                }
-                $status = $new;
+        $store = new AtomicCallbackStore(static function () use (&$status): string {
+            return $status;
+        }, static function (string $expected, string $new) use (&$status): bool {
+            if ($status !== $expected) {
+                return false;
+            }
+            $status = $new;
 
-                return true;
-            },
-        );
+            return true;
+        });
         $machine = new Machine(
             $this->video(extra: [
                 Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$status): void {
@@ -424,7 +434,9 @@ final class MachineTest extends VideoTestCase
     public function testTryTransitionStillThrowsForHookFailures(): void
     {
         $definition = $this->video(extra: [
-            Transition::on('BOOM', 'stopped', 'playing')->withBefore(static fn() => throw new \RuntimeException('hook')),
+            Transition::on('BOOM', 'stopped', 'playing')->withBefore(
+                static fn() => throw new \RuntimeException('hook'),
+            ),
         ]);
 
         $this->expectException(\RuntimeException::class);

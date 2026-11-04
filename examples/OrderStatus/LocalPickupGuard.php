@@ -24,9 +24,10 @@ final readonly class LocalPickupGuard implements Guard
         }
 
         if (($context->payload['localPickup'] ?? false) === true) {
-            return !(
-                in_array($to, [S::Sendable, S::Servable], true) && $from === S::ShopPackable
-            ) && !($to === S::Completed && $from !== S::ShopReceivable);
+            return (
+                !(in_array($to, [S::Sendable, S::Servable], true) && $from === S::ShopPackable)
+                && !($to === S::Completed && $from !== S::ShopReceivable)
+            );
         }
 
         return !in_array($to, [S::ShopPackable, S::ShopReceivable], true);

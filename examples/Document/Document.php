@@ -11,5 +11,7 @@ final class Document
 {
     public ?string $reviewer = null;
 
-    public function __construct(public DocumentState $status = DocumentState::Draft) {}
+    public function __construct(
+        public DocumentState $status = DocumentState::Draft,
+    ) {}
 }

@@ -20,7 +20,10 @@ final class Name
         }
 
         if (!is_string($value->value)) {
-            throw new InvalidDefinitionException(sprintf('%s is int-backed; only string-backed enums can name states and events.', $value::class));
+            throw new InvalidDefinitionException(sprintf(
+                '%s is int-backed; only string-backed enums can name states and events.',
+                $value::class,
+            ));
         }
 
         return $value->value;
@@ -36,7 +39,10 @@ final class Name
             return [self::of($values)];
         }
 
-        return array_values(array_unique(array_map(self::of(...), is_array($values) ? $values : iterator_to_array($values, false))));
+        return array_values(array_unique(array_map(
+            self::of(...),
+            is_array($values) ? $values : iterator_to_array($values, false),
+        )));
     }
 
     private function __construct() {}

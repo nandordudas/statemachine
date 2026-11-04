@@ -153,8 +153,11 @@ final class Machine implements StateMachine
      * @param array<string, mixed> $payload
      * @return Transition|(UnknownEventException|TransitionNotAllowedException) the refusal, not thrown
      */
-    private function plan(string $event, string $from, array $payload): Transition|UnknownEventException|TransitionNotAllowedException
-    {
+    private function plan(
+        string $event,
+        string $from,
+        array $payload,
+    ): Transition|UnknownEventException|TransitionNotAllowedException {
         if (!$this->definition->hasEvent($event)) {
             return UnknownEventException::named($event);
         }
@@ -165,12 +168,9 @@ final class Machine implements StateMachine
             return $transition;
         }
 
-        return array_any(
-            $this->definition->transitionsFor($event),
-            static fn(Transition $t): bool => $t->leavesFrom($from),
-        )
-            ? GuardRejectedException::forEvent($event, $from)
-            : TransitionNotAllowedException::fromState($event, $from);
+        return array_any($this->definition->transitionsFor($event), static fn(Transition $t): bool => $t->leavesFrom(
+            $from,
+        )) ? GuardRejectedException::forEvent($event, $from) : TransitionNotAllowedException::fromState($event, $from);
     }
 
     /**
@@ -228,9 +228,9 @@ final class Machine implements StateMachine
      */
     private function select(string $event, string $from, array $payload): ?Transition
     {
-        return array_find(
-            $this->definition->transitionsFor($event),
-            static fn(Transition $t): bool => $t->permits($from, $payload),
-        );
+        return array_find($this->definition->transitionsFor($event), static fn(Transition $t): bool => $t->permits(
+            $from,
+            $payload,
+        ));
     }
 }

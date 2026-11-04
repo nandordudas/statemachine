@@ -22,8 +22,10 @@ final readonly class PropertyStore implements StateStore
 {
     private ReflectionProperty $property;
 
-    public function __construct(private object $target, string $property = 'status')
-    {
+    public function __construct(
+        private object $target,
+        string $property = 'status',
+    ) {
         if (!property_exists($target, $property)) {
             throw new InvalidDefinitionException(sprintf('%s has no property "%s".', $target::class, $property));
         }
@@ -41,7 +43,9 @@ final readonly class PropertyStore implements StateStore
     public function set(string $state): void
     {
         $type = $this->property->getType();
-        $enum = $type instanceof ReflectionNamedType && enum_exists($type->getName()) && is_subclass_of($type->getName(), BackedEnum::class)
+        $enum = $type instanceof ReflectionNamedType
+        && enum_exists($type->getName())
+        && is_subclass_of($type->getName(), BackedEnum::class)
             ? $type->getName()
             : null;
 

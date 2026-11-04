@@ -8,7 +8,9 @@ use Dudas\StateMachine\Contracts\AtomicStateStore;
 
 final class InMemoryStore implements AtomicStateStore
 {
-    public function __construct(private string $state) {}
+    public function __construct(
+        private string $state,
+    ) {}
 
     public function get(): string
     {

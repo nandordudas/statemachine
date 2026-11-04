@@ -25,7 +25,10 @@ final readonly class AtomicCallbackStore implements AtomicStateStore
      * @param Closure(): (string|BackedEnum|null) $reader
      * @param Closure(string, string): bool $compareAndSet receives (expected, new); returns whether it wrote
      */
-    public function __construct(private Closure $reader, private Closure $compareAndSet) {}
+    public function __construct(
+        private Closure $reader,
+        private Closure $compareAndSet,
+    ) {}
 
     public function get(): string
     {

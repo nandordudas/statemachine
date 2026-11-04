@@ -35,8 +35,16 @@ final class SugarTest extends TestCase
     {
         $reviewer = allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')));
 
-        self::assertTrue($reviewer->allows($this->context(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann'])));
-        self::assertFalse($reviewer->allows($this->context(['role' => 'approver', 'actor' => 'ann', 'author' => 'ann'])));
+        self::assertTrue($reviewer->allows($this->context([
+            'role' => 'approver',
+            'actor' => 'bob',
+            'author' => 'ann',
+        ])));
+        self::assertFalse($reviewer->allows($this->context([
+            'role' => 'approver',
+            'actor' => 'ann',
+            'author' => 'ann',
+        ])));
         self::assertFalse($reviewer->allows($this->context(['role' => 'editor', 'actor' => 'bob', 'author' => 'ann'])));
 
         $either = anyOf(payloadIs('admin', true), static fn(TransitionContext $c): bool => ($c->payload['n'] ?? 0) > 1);
@@ -54,11 +62,12 @@ final class SugarTest extends TestCase
 
     public function testCombinatorsWorkInsideTransitions(): void
     {
-        $video = machine(
-            initial: S::Stopped,
-            states: S::class,
-            transitions: [on(E::Play, S::Stopped, S::Playing, guard: allOf(payloadIs('licensed', true), not(payloadIs('banned', true))))],
-        );
+        $video = machine(initial: S::Stopped, states: S::class, transitions: [on(
+            E::Play,
+            S::Stopped,
+            S::Playing,
+            guard: allOf(payloadIs('licensed', true), not(payloadIs('banned', true))),
+        )]);
 
         self::assertFalse($video->can(E::Play));
         self::assertFalse($video->can(E::Play, ['licensed' => true, 'banned' => true]));
@@ -111,16 +120,12 @@ final class SugarTest extends TestCase
     public function testSendAllRunsEventsInOrderWithOptionalPayloads(): void
     {
         $seen = [];
-        $video = machine(
-            initial: S::Stopped,
-            states: S::class,
-            transitions: [
-                on(E::Play, S::Stopped, S::Playing, after: static function (TransitionContext $c) use (&$seen): void {
-                    $seen[] = $c->payload;
-                }),
-                on(E::Pause, S::Playing, S::Paused),
-            ],
-        );
+        $video = machine(initial: S::Stopped, states: S::class, transitions: [
+            on(E::Play, S::Stopped, S::Playing, after: static function (TransitionContext $c) use (&$seen): void {
+                $seen[] = $c->payload;
+            }),
+            on(E::Pause, S::Playing, S::Paused),
+        ]);
 
         $video->sendAll([[E::Play, ['via' => 'test']], E::Pause]);
 
@@ -138,8 +143,14 @@ final class SugarTest extends TestCase
 
         $recorded = machine(S::Stopped, S::class, $transitions, history: true);
         $recorded->sendAll([E::Play, E::Stop]);
-        self::assertSame(['PLAY', 'STOP'], array_map(static fn(TransitionContext $c): string => $c->event, $recorded->history()));
-        self::assertSame(['stopped', 'playing'], array_map(static fn(TransitionContext $c): string => $c->from, $recorded->history()));
+        self::assertSame(
+            ['PLAY', 'STOP'],
+            array_map(static fn(TransitionContext $c): string => $c->event, $recorded->history()),
+        );
+        self::assertSame(
+            ['stopped', 'playing'],
+            array_map(static fn(TransitionContext $c): string => $c->from, $recorded->history()),
+        );
     }
 
     public function testMermaidAndDotExport(): void

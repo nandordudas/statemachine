@@ -34,13 +34,17 @@ final class PaymentFlow
             ->states(...S::cases())
             ->onEnter(S::Captured, $bookRevenue)
             ->transition(
-                Transition::on(E::Authorize, S::Pending, S::Authorized)
-                    ->withGuard(static fn(TransitionContext $c): bool => ($c->payload['gatewayApproved'] ?? false) === true),
+                Transition::on(E::Authorize, S::Pending, S::Authorized)->withGuard(
+                    static fn(TransitionContext $c): bool => ($c->payload['gatewayApproved'] ?? false) === true,
+                ),
                 Transition::on(E::Authorize, S::Pending, S::Declined),
                 Transition::on(E::Capture, S::Authorized, S::Captured),
                 Transition::on(E::Void, S::Authorized, S::Voided),
-                Transition::on(E::Refund, S::Captured, S::Refunded)
-                    ->withGuard(static fn(TransitionContext $c): bool => ($c->payload['amount'] ?? 0) <= ($c->payload['captured'] ?? 0)),
+                Transition::on(E::Refund, S::Captured, S::Refunded)->withGuard(
+                    static fn(TransitionContext $c): bool => (
+                        ($c->payload['amount'] ?? 0) <= ($c->payload['captured'] ?? 0)
+                    ),
+                ),
             )
             ->build();
     }

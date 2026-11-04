@@ -55,7 +55,9 @@ final readonly class Transition
         $sources = Name::listOf($from);
 
         if ($this->event === '' || $this->to === '' || $sources === [] || in_array('', $sources, true)) {
-            throw new InvalidDefinitionException('A transition needs a non-empty event, source state(s) and target state.');
+            throw new InvalidDefinitionException(
+                'A transition needs a non-empty event, source state(s) and target state.',
+            );
         }
 
         $this->from = $sources;

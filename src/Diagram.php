@@ -23,7 +23,12 @@ final class Diagram
 
         foreach ($definition->transitions as $transition) {
             foreach ($transition->from as $from) {
-                $lines[] = sprintf('    %s --> %s : %s', self::id($from), self::id($transition->to), self::label($transition));
+                $lines[] = sprintf(
+                    '    %s --> %s : %s',
+                    self::id($from),
+                    self::id($transition->to),
+                    self::label($transition),
+                );
             }
         }
 
@@ -35,7 +40,11 @@ final class Diagram
         $lines = ['digraph machine {', '    rankdir=LR;', '    start [shape=point];'];
 
         foreach ($definition->states as $state) {
-            $lines[] = sprintf('    "%s" [shape=%s];', addcslashes($state, '"\\'), $state === $definition->initial ? 'doublecircle' : 'circle');
+            $lines[] = sprintf(
+                '    "%s" [shape=%s];',
+                addcslashes($state, '"\\'),
+                $state === $definition->initial ? 'doublecircle' : 'circle',
+            );
         }
 
         $lines[] = sprintf('    start -> "%s";', addcslashes($definition->initial, '"\\'));
