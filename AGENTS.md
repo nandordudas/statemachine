@@ -48,6 +48,13 @@ Pipeline of `send()`: select transition (guards, first permitted wins) → `befo
 Guards must be side-effect free (they run in `can()` and `availableEvents()` too). Chain events from `onEnter`/`after`
 hooks only. Use `AtomicStateStore` (`AtomicCallbackStore`) for state shared between writers.
 
+## Packaging
+
+Published as its own Composer package, `nandordudas/state-machine-php72` (this branch is that repository's `main`);
+the PHP 8.5 package is `nandordudas/state-machine`. Both declare a `conflict` with each other. Tag releases with the
+same version as the other package. `.github/workflows/ci.yml` checks out both branches, so it only works in the
+combined repository; trim its matrix to a single job if this branch lives in its own repo.
+
 ## Commands
 
 ```
