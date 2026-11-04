@@ -1,8 +1,8 @@
 name: CI
 
 # Builds and verifies both Composer packages of this repository:
-#   - nandordudas/state-machine          (branch `main`,  PHP 8.5+)
-#   - nandordudas/state-machine-php72    (branch `php72`, PHP 7.2+)
+#   - nandordudas/state-machine 2.x (branch `main`,  PHP 8.5+)
+#   - nandordudas/state-machine 1.x (branch `php72`, PHP 7.2+)
 # Each matrix entry checks out its own branch, so a push to either branch verifies both.
 
 on:
@@ -26,10 +26,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - package: state-machine
+          - package: state-machine-2.x
             ref: main
             php: '8.5'
-          - package: state-machine-php72
+          - package: state-machine-1.x
             ref: php72
             php: '7.2'
     steps:
