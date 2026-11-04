@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Video Player Machine",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      980,
+      566
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Playback"
+    }
+  ],
+  "states": [
+    {
+      "id": "stopped",
+      "type": "start",
+      "label": "stopped",
+      "sublabel": "initial state",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "playing",
+      "type": "active",
+      "label": "playing",
+      "sublabel": "licensed playback",
+      "lane": "main",
+      "col": 2,
+      "step": "02"
+    },
+    {
+      "id": "paused",
+      "type": "waiting",
+      "label": "paused",
+      "sublabel": "position kept",
+      "lane": "main",
+      "col": 4,
+      "step": "03"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "play",
+      "from": "stopped",
+      "to": "playing",
+      "label": "PLAY [licensed]"
+    },
+    {
+      "id": "pause",
+      "from": "playing",
+      "to": "paused",
+      "label": "PAUSE"
+    },
+    {
+      "id": "resume",
+      "from": "paused",
+      "to": "playing",
+      "label": "PLAY [licensed]",
+      "route": "top-channel",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "id": "stop",
+      "from": "playing",
+      "to": "stopped",
+      "label": "STOP",
+      "route": "bottom-channel",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    }
+  ]
+}
