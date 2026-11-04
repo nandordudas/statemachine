@@ -85,10 +85,10 @@ final class DefinitionTest extends VideoTestCase
         ]);
 
         self::assertSame(['X', 'Y'], $definition->eventsFrom('a'), 'events keep their definition order');
-        self::assertSame(['b', 'c'], array_map(
-            static fn(Transition $t): string => $t->to,
-            $definition->transitionsFrom('a', 'Y'),
-        ));
+        self::assertSame(
+            ['b', 'c'],
+            array_map(static fn(Transition $t): string => $t->to, $definition->transitionsFrom('a', 'Y')),
+        );
         self::assertSame([], $definition->transitionsFrom('c', 'X'));
         self::assertSame([], $definition->eventsFrom('c'));
     }

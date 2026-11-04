@@ -210,8 +210,10 @@ final class Machine implements StateMachine
 
     public function tryTransition(string|BackedEnum $event, array $payload = []): TransitionResult
     {
-        return $this->dispatch(Name::of($event), $payload, self::RESULT) ?? throw new LogicException(
-            'Only a quiet send reports a refusal as null.',
+        return (
+            $this->dispatch(Name::of($event), $payload, self::RESULT) ?? throw new LogicException(
+                'Only a quiet send reports a refusal as null.',
+            )
         );
     }
 
