@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Store;
 
-use BackedEnum;
 use Closure;
 use Dudas\StateMachine\Contracts\AtomicStateStore;
 use Dudas\StateMachine\Exception\ConcurrentTransitionException;
@@ -12,26 +11,35 @@ use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Name;
 
 /**
- * Like {@see CallbackStore}, with a conditional writer for state shared between writers:
- *
- *     new AtomicCallbackStore(
- *         fn () => $order->status,
- *         fn (string $expected, string $new): bool => $repo->updateStatus($order->id, $expected, $new) === 1,
- *     );
+ * Like {@see CallbackStore}, with a conditional writer for state shared between writers.
  */
-final readonly class AtomicCallbackStore implements AtomicStateStore
+final class AtomicCallbackStore implements AtomicStateStore
 {
+    /** @var Closure */
+    private $reader;
+
+    /** @var Closure */
+    private $compareAndSet;
+
     /**
-     * @param Closure(): (string|BackedEnum|null) $reader
+     * @param Closure(): (string|null) $reader
      * @param Closure(string, string): bool $compareAndSet receives (expected, new); returns whether it wrote
      */
-    public function __construct(private Closure $reader, private Closure $compareAndSet) {}
+    public function __construct(Closure $reader, Closure $compareAndSet)
+    {
+        $this->reader = $reader;
+        $this->compareAndSet = $compareAndSet;
+    }
 
     public function get(): string
     {
         $state = ($this->reader)();
 
-        return $state === null ? throw UnknownStateException::missing() : Name::of($state);
+        if ($state === null) {
+            throw UnknownStateException::missing();
+        }
+
+        return Name::of($state);
     }
 
     public function set(string $state): void
@@ -45,6 +53,6 @@ final readonly class AtomicCallbackStore implements AtomicStateStore
 
     public function compareAndSet(string $expected, string $state): bool
     {
-        return ($this->compareAndSet)($expected, $state);
+        return (bool) ($this->compareAndSet)($expected, $state);
     }
 }

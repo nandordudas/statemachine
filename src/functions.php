@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine;
 
-use BackedEnum;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Contracts\StateStore;
@@ -18,59 +17,46 @@ use Dudas\StateMachine\Store\PropertyStore;
 /**
  * Shorthand for {@see Transition}: one call instead of `Transition::on()->withGuard()->withAfter()`.
  *
- *     on(E::Approve, from: S::Review, to: S::Published, guard: new ApproverGuard(), after: $audit)
+ *     on('APPROVE', 'review', 'published', new ApproverGuard(), [], $audit)
  *
- * `guard`, `before` and `after` take a single guard/hook/closure or a list of them.
+ * `$guard`, `$before` and `$after` take a single guard/hook/callable or a list of them.
  *
- * @param string|BackedEnum|non-empty-list<string|BackedEnum> $from
- * @param Guard|callable(TransitionContext): bool|list<Guard|callable(TransitionContext): bool> $guard
- * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $before
- * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $after
+ * @param string|string[] $from
+ * @param Guard|callable|array $guard
+ * @param Hook|callable|array $before
+ * @param Hook|callable|array $after
  */
-function on(
-    string|BackedEnum $event,
-    string|BackedEnum|array $from,
-    string|BackedEnum $to,
-    Guard|callable|array $guard = [],
-    Hook|callable|array $before = [],
-    Hook|callable|array $after = [],
-): Transition {
+function on(string $event, $from, string $to, $guard = [], $before = [], $after = []): Transition
+{
     return new Transition($event, $from, $to, listOf($guard), listOf($before), listOf($after));
 }
 
 /**
  * Builds a ready-to-use {@see Machine} in one call.
  *
- *     $video = machine(
- *         initial: S::Stopped,
- *         states: S::class,                       // or a list; an enum class lists all its cases
- *         transitions: [on(E::Play, S::Stopped, S::Playing)],
- *         onEnter: [S::Playing->value => $log],   // hooks by state name
- *     );
+ *     $video = machine('stopped', ['playing', 'stopped'], [on('PLAY', 'stopped', 'playing')]);
  *
- * @param class-string<BackedEnum>|list<string|BackedEnum> $states
- * @param list<Transition> $transitions
- * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onEnter
- * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onExit
+ * @param string[] $states
+ * @param Transition[] $transitions
+ * @param array<string, Hook|callable|array> $onEnter hooks by state name
+ * @param array<string, Hook|callable|array> $onExit hooks by state name
  */
 function machine(
-    string|BackedEnum $initial,
-    string|array $states,
+    string $initial,
+    array $states,
     array $transitions,
     array $onEnter = [],
     array $onExit = [],
     ?StateStore $store = null,
     bool $history = false,
 ): Machine {
-    $states = is_string($states) ? $states::cases() : $states;
-
     return new Machine(
         new Definition(
             $initial,
             $states,
             $transitions,
-            array_map(listOf(...), $onEnter),
-            array_map(listOf(...), $onExit),
+            array_map(__NAMESPACE__ . '\\listOf', $onEnter),
+            array_map(__NAMESPACE__ . '\\listOf', $onExit),
         ),
         $store,
         $history,
@@ -78,54 +64,57 @@ function machine(
 }
 
 /**
- * @template T
- * @param T|list<T> $value
- * @return list<T>
- *
- * @internal
- */
-function listOf(mixed $value): array
-{
-    return is_array($value) ? array_values($value) : [$value];
-}
-
-/**
- * A machine whose state lives in a property of `$entity` (string or backed enum typed).
- *
- *     $flow = machineFor($definition, $document);            // property 'status'
- *     $flow = machineFor($definition, $order, 'stage');
+ * A machine whose state lives in a (string) property of `$entity`.
  */
 function machineFor(Definition $definition, object $entity, string $property = 'status', bool $history = false): Machine
 {
     return new Machine($definition, new PropertyStore($entity, $property), $history);
 }
 
-/** Guard: every inner guard allows. */
-function allOf(Guard|callable ...$guards): Guard
+/**
+ * @param Guard|callable(TransitionContext): bool ...$guards
+ */
+function allOf(...$guards): Guard
 {
     return new AllOf(...$guards);
 }
 
-/** Guard: at least one inner guard allows. */
-function anyOf(Guard|callable ...$guards): Guard
+/**
+ * @param Guard|callable(TransitionContext): bool ...$guards
+ */
+function anyOf(...$guards): Guard
 {
     return new AnyOf(...$guards);
 }
 
-/** Guard: the inner guard does not allow. */
-function not(Guard|callable $guard): Guard
+/**
+ * @param Guard|callable(TransitionContext): bool $guard
+ */
+function not($guard): Guard
 {
     return new Not($guard);
 }
 
-/** Guard: `payload[$key] === $expected`. */
-function payloadIs(string $key, mixed $expected): Guard
+/**
+ * @param mixed $expected
+ */
+function payloadIs(string $key, $expected): Guard
 {
     return new PayloadIs($key, $expected);
 }
 
-/** Guard: `payload[$a] === payload[$b]`. */
 function payloadsEqual(string $a, string $b): Guard
 {
     return new PayloadsEqual($a, $b);
+}
+
+/**
+ * @param mixed $value
+ * @return array<mixed>
+ *
+ * @internal
+ */
+function listOf($value): array
+{
+    return is_array($value) ? array_values($value) : [$value];
 }

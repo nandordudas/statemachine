@@ -8,9 +8,19 @@ use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\TransitionContext;
 
 /** Allows when two payload entries are strictly identical (both missing counts as equal). */
-final readonly class PayloadsEqual implements Guard
+final class PayloadsEqual implements Guard
 {
-    public function __construct(private string $a, private string $b) {}
+    /** @var string */
+    private $a;
+
+    /** @var string */
+    private $b;
+
+    public function __construct(string $a, string $b)
+    {
+        $this->a = $a;
+        $this->b = $b;
+    }
 
     public function allows(TransitionContext $context): bool
     {
