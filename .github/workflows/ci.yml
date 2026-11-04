@@ -71,9 +71,21 @@ jobs:
       - if: ${{ !cancelled() }}
         run: composer test
 
+      # Informational: on a pull request the base branch is measured on the same runner, so the figures compare.
       - name: Benchmark (informational)
         if: ${{ !cancelled() && hashFiles('bench/run.php') != '' }}
-        run: php -d zend.assertions=-1 bench/run.php 50000
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          php -d zend.assertions=-1 bench/run.php 50000 | tee "$RUNNER_TEMP/head.txt"
+          [ -n "$BASE_REF" ] || exit 0
+          git fetch --quiet --depth=1 origin "$BASE_REF"
+          git worktree add --quiet "$RUNNER_TEMP/base" FETCH_HEAD
+          cp -r vendor "$RUNNER_TEMP/base/"
+          mkdir -p "$RUNNER_TEMP/base/bench" && cp bench/run.php bench/compare.php "$RUNNER_TEMP/base/bench/"
+          (cd "$RUNNER_TEMP/base" && composer dump-autoload --quiet)
+          php -d zend.assertions=-1 "$RUNNER_TEMP/base/bench/run.php" 50000 > "$RUNNER_TEMP/base.txt"
+          php bench/compare.php "$RUNNER_TEMP/base.txt" "$RUNNER_TEMP/head.txt"
 
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
