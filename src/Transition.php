@@ -8,6 +8,7 @@ use BackedEnum;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
+use Dudas\StateMachine\Guards\Explain;
 
 /**
  * An immutable edge of the graph: `$event` moves the machine from any of `$from` to `$to`.
@@ -40,12 +41,19 @@ final readonly class Transition
     public array $abort;
 
     /**
+     * @var array<string, mixed> free-form data for UIs, guards and diagrams. Known keys: `label` (shown in
+     *      diagrams) and `blocked` (the message of a guard that refuses without explaining why).
+     */
+    public array $meta;
+
+    /**
      * @param string|BackedEnum|non-empty-list<string|BackedEnum> $from
      * @param array<Guard|callable(TransitionContext): bool> $guards all must allow the transition
      * @param array<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
      * @param array<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
      * @param array<Hook|callable(TransitionContext): mixed> $abort run when a `before`/`onExit` hook threw or the
      *                                                             write lost a race: undo their side effects here
+     * @param array<string, mixed> $meta see {@see $meta}
      */
     public function __construct(
         string|BackedEnum $event,
@@ -55,6 +63,7 @@ final readonly class Transition
         array $before = [],
         array $after = [],
         array $abort = [],
+        array $meta = [],
     ) {
         $this->event = Name::of($event);
         $this->to = Name::of($to);
@@ -71,6 +80,7 @@ final readonly class Transition
         $this->before = array_map(ClosureHook::wrap(...), array_values($before));
         $this->after = array_map(ClosureHook::wrap(...), array_values($after));
         $this->abort = array_map(ClosureHook::wrap(...), array_values($abort));
+        $this->meta = $meta;
     }
 
     /**
@@ -120,6 +130,49 @@ final readonly class Transition
         return clone($this, ['abort' => [...$this->abort, ClosureHook::wrap($hook)]]);
     }
 
+    /**
+     * Adds (or overrides) metadata keys.
+     *
+     * @param array<string, mixed> $meta
+     */
+    #[\NoDiscard]
+    public function withMeta(array $meta): self
+    {
+        return clone($this, ['meta' => [...$this->meta, ...$meta]]);
+    }
+
+    /**
+     * Why the guards refuse this transition from `$from`; empty when it is allowed (or there are no guards).
+     * Unlike {@see permits()} it asks every guard, so all reasons are listed. Does not check `$from`.
+     *
+     * @param array<string, mixed> $payload
+     * @return list<Blocker>
+     */
+    public function blockers(string $from, array $payload = []): array
+    {
+        if ($this->guards === []) {
+            return [];
+        }
+
+        $context = $this->contextFor($from, $payload);
+        $blockers = [];
+
+        foreach ($this->guards as $guard) {
+            array_push($blockers, ...Explain::blockers($guard, $context));
+        }
+
+        $message = $this->meta['blocked'] ?? null;
+
+        if (!is_string($message)) {
+            return $blockers;
+        }
+
+        // A guard that gave no reason gets the transition's own message, so guards can stay generic.
+        return array_map(static fn(Blocker $b): Blocker => $b->code === Blocker::GUARD_REJECTED
+            ? new Blocker($b->code, $message, $b->parameters)
+            : $b, $blockers);
+    }
+
     public function leavesFrom(string $state): bool
     {
         return in_array($state, $this->from, true);
@@ -130,7 +183,7 @@ final readonly class Transition
      */
     public function contextFor(string $from, array $payload = []): TransitionContext
     {
-        return new TransitionContext($this->event, $from, $this->to, $payload);
+        return new TransitionContext($this->event, $from, $this->to, $payload, $this->meta);
     }
 
     /**

@@ -84,6 +84,43 @@ $machine->drive((function () {                            // a process that bran
 foreach ($definition->shortestPaths() as $state => $events) { /* events that reach $state, e.g. for tests */ }
 ```
 
+### Why not? Blockers and metadata
+
+Ask *why* an event is refused, not just whether (like Symfony Workflow's transition blockers), and keep labels,
+roles and messages next to the transitions they describe (like `meta` in XState):
+
+```php
+use function Dudas\StateMachine\{because, allOf, payloadIs, on};
+
+on(E::Approve, S::Review, S::Published,
+    guard: allOf(
+        because(payloadIs('role', 'approver'), 'Only approvers can approve.', code: 'not_approver'),
+        because(fn ($c) => $c->payload['signed'] ?? false, 'The document is not signed yet.', code: 'unsigned'),
+    ),
+    meta: ['label' => 'Approve', 'style' => 'primary', 'blocked' => 'This document cannot be approved yet.'],
+);
+
+$doc->blockers(E::Approve, $payload);           // list<Blocker>: code, message, parameters; [] when allowed
+$doc->tryTransition(E::Approve)->blockers();    // the same reasons for a refused attempt
+$e->blockers();                                 // on the GuardRejectedException a send() throws
+
+foreach ($doc->availableTransitions($payload) as $t) {   // the transitions, for their meta
+    echo $button($t->meta['label'] ?? $t->event, $t->meta['style'] ?? 'default');
+}
+```
+
+- `allOf()` lists **every** failing guard, not only the first; `anyOf()` explains only when every alternative fails.
+- A guard class can explain itself by implementing `ExplainingGuard::blockers()` (see `examples/Document/ApproverGuard.php`).
+- A guard that gives no reason yields a `Blocker::GUARD_REJECTED`; the transition's `meta['blocked']` supplies its
+  message, so the wording lives in the definition rather than in the guard.
+- Unknown and not-allowed events are explained too (`Blocker::UNKNOWN_EVENT`, `Blocker::NOT_ALLOWED`).
+- Guards and hooks see the transition's metadata as `$context->meta`. States have metadata as well:
+  `->meta(S::Review, ['label' => 'In review'])` on the builder, `$definition->metaFor(S::Review)`.
+- `toMermaid()`/`toDot()` show `label`s.
+
+`blockers()` asks every guard of every candidate transition, so it costs more than `can()`; a refused `send()` or
+`tryTransition()` asks them once more to fill the exception's blockers. `sendIfAllowed()` and successful sends never do.
+
 ## Design
 
 - `Definition` is an immutable, validated blueprint (shareable); `Machine` is the runtime instance.
@@ -110,7 +147,7 @@ foreach ($definition->shortestPaths() as $state => $events) { /* events that rea
 |---|---|
 | Unknown event | `UnknownEventException` |
 | No transition from the current state | `TransitionNotAllowedException` |
-| Transition exists but every guard vetoes | `GuardRejectedException` |
+| Transition exists but every guard vetoes | `GuardRejectedException` (`->blockers()` says why) |
 | `before` or `onExit` hook throws | transition aborted, state unchanged, the transition's `abort` hooks run, exception propagates |
 | `send()` from a `before`/`onExit` hook | `ConcurrentTransitionException`, stale transition not applied |
 | State changed during `before`/`onExit` hooks, or the atomic write lost the race | `ConcurrentTransitionException`, `abort` hooks run |
