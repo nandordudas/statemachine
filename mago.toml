@@ -1,0 +1,22 @@
+php-version = "8.5"
+
+[source]
+paths = ["src", "examples", "tests"]
+includes = ["vendor"]
+
+[linter.rules]
+literal-named-argument = { enabled = false }
+function-name = { enabled = false }
+no-isset = { enabled = false }
+excessive-parameter-list = { enabled = false }
+too-many-methods = { enabled = false }
+too-many-enum-cases = { enabled = false }
+kan-defect = { enabled = false }
+cyclomatic-complexity = { enabled = false }
+no-empty-catch-clause = { enabled = false }
+no-boolean-flag-parameter = { enabled = false }
+
+[analyzer]
+excludes = ["tests"]
+# Docblock-precision noise from generic hook/guard callables and payload arrays.
+ignore = ["less-specific-nested-argument-type", "less-specific-argument", "mixed-assignment", "mixed-operand", "mixed-argument", "redundant-cast", "impossible-condition", "redundant-type-comparison", "possibly-invalid-argument", "possibly-static-access-on-interface"]
