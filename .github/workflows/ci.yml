@@ -3,7 +3,7 @@ name: CI
 # Builds and verifies both Composer packages of this repository:
 #   - nandordudas/state-machine 2.x (branch `main`,  PHP 8.5+)
 #   - nandordudas/state-machine 1.x (branch `php72`, PHP 7.2+)
-# Each matrix entry checks out its own branch, so a push to either branch verifies both.
+# A push or pull request verifies both lines: its own commit for the line it targets, the other branch as is.
 
 on:
   push:
@@ -33,9 +33,11 @@ jobs:
             ref: php72
             php: '7.2'
     steps:
+      # The line this run is about (push to it, or a pull request into it) tests the triggering commit;
+      # the other line is checked out from its branch so both packages stay verified.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ matrix.ref }}
+          ref: ${{ ((github.base_ref || github.ref_name) == 'php72') != (matrix.ref == 'php72') && matrix.ref || '' }}
 
       - uses: shivammathur/setup-php@v2
         with:

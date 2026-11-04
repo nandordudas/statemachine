@@ -7,6 +7,7 @@ namespace Dudas\StateMachine;
 use BackedEnum;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
+use Generator;
 
 /**
  * The immutable blueprint of a machine: states, initial state and transitions.
@@ -14,6 +15,10 @@ use Dudas\StateMachine\Exception\InvalidDefinitionException;
  *
  * Several transitions may share an event and source state; the first whose guards
  * allow it wins, which expresses conditional branching.
+ *
+ * Guard and hook objects are shared by every machine built from the definition, so keep them
+ * stateless: in long-running workers (RoadRunner, Swoole, FrankenPHP) state kept in them leaks
+ * between requests.
  */
 final readonly class Definition
 {
@@ -27,6 +32,12 @@ final readonly class Definition
 
     /** @var list<string> */
     private array $eventNames;
+
+    /** @var array<string, true> declared states, for constant-time lookup */
+    private array $stateIndex;
+
+    /** @var array<string, list<Transition>> transitions grouped by source state, in declaration order */
+    private array $bySource;
 
     /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
     private array $byEvent;
@@ -115,6 +126,15 @@ final readonly class Definition
         }
         $this->byEvent = $byEvent;
         $this->eventNames = array_map(strval(...), array_keys($names));
+        $this->stateIndex = array_fill_keys($known, true);
+
+        $bySource = [];
+        foreach ($checked as $transition) {
+            foreach ($transition->from as $source) {
+                $bySource[$source][] = $transition;
+            }
+        }
+        $this->bySource = $bySource;
     }
 
     /**
@@ -193,26 +213,46 @@ final readonly class Definition
      */
     public function unreachableStates(): array
     {
-        $reached = [$this->initial => true];
-        $queue = [$this->initial];
-
-        while ($queue !== []) {
-            $state = array_shift($queue);
-
-            foreach ($this->transitions as $transition) {
-                if ($transition->leavesFrom($state) && !isset($reached[$transition->to])) {
-                    $reached[$transition->to] = true;
-                    $queue[] = $transition->to;
-                }
-            }
-        }
+        $reached = iterator_to_array($this->shortestPaths());
 
         return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
 
+    /**
+     * Lazily walks the graph breadth-first from the initial state and yields, for every reachable state,
+     * the shortest list of events that leads there (guards are ignored). Handy to generate tests:
+     *
+     *     foreach ($definition->shortestPaths() as $state => $events) {
+     *         self::assertSame($state, machineWithoutGuards()->sendAll($events)->state);
+     *     }
+     *
+     * @return Generator<string, list<string>, mixed, void>
+     */
+    public function shortestPaths(): Generator
+    {
+        /** @var array<string, list<string>> $paths */
+        $paths = [$this->initial => []];
+        $queue = [$this->initial];
+        $next = 0;
+
+        // A moving index instead of array_shift(): each step is O(1).
+        while (isset($queue[$next])) {
+            $state = $queue[$next++];
+
+            yield $state => $paths[$state];
+
+            foreach ($this->bySource[$state] ?? [] as $transition) {
+                if (!isset($paths[$transition->to])) {
+                    $paths[$transition->to] = [...$paths[$state], $transition->event];
+                    $queue[] = $transition->to;
+                }
+            }
+        }
+    }
+
     public function hasState(string $state): bool
     {
-        return in_array($state, $this->states, true);
+        return isset($this->stateIndex[$state]);
     }
 
     /**
