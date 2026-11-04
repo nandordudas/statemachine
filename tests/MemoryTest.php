@@ -61,7 +61,7 @@ final class MemoryTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Closure(): Closure(): mixed}>
+     * @return iterable<string, array{Closure(): (Closure(): mixed)}>
      */
     public static function scenarios(): iterable
     {
@@ -221,7 +221,7 @@ final class MemoryTest extends TestCase
     }
 
     /**
-     * @param Closure(): Closure(): mixed $scenario builds the machine and returns the operation to repeat
+     * @param Closure(): (Closure(): mixed) $scenario builds the machine and returns the operation to repeat
      */
     #[DataProvider('scenarios')]
     public function testRepeatedOperationsDoNotAccumulateMemory(Closure $scenario): void

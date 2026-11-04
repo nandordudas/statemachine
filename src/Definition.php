@@ -36,7 +36,7 @@ final readonly class Definition
     /** @var array<string, true> declared states, for constant-time lookup */
     private array $stateIndex;
 
-    /** @var array<string, list<Transition>> transitions grouped by source state, in declaration order */
+    /** @var array<string, array<string, list<Transition>>> transitions by source state and event, in declaration order */
     private array $bySource;
 
     /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
@@ -73,7 +73,9 @@ final readonly class Definition
             throw new InvalidDefinitionException('State names must not be empty.');
         }
 
-        if (!in_array($initial, $known, true)) {
+        $index = array_fill_keys($known, true);
+
+        if (!isset($index[$initial])) {
             throw new InvalidDefinitionException(sprintf('Initial state "%s" is not a declared state.', $initial));
         }
 
@@ -88,7 +90,7 @@ final readonly class Definition
             }
 
             foreach ([...$transition->from, $transition->to] as $state) {
-                if (!in_array($state, $known, true)) {
+                if (!isset($index[$state])) {
                     throw new InvalidDefinitionException(sprintf(
                         'Transition "%s" refers to undeclared state "%s".',
                         $transition->event,
@@ -102,7 +104,7 @@ final readonly class Definition
 
         foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
-                if (!in_array((string) $state, $known, true)) {
+                if (!isset($index[$state])) {
                     throw new InvalidDefinitionException(sprintf(
                         '%s hook refers to undeclared state "%s".',
                         $kind,
@@ -126,12 +128,15 @@ final readonly class Definition
         }
         $this->byEvent = $byEvent;
         $this->eventNames = array_map(strval(...), array_keys($names));
-        $this->stateIndex = array_fill_keys($known, true);
+        $this->stateIndex = $index;
 
+        // Grouped by source, then by event in definition order (so availableEvents() keeps that order).
         $bySource = [];
-        foreach ($checked as $transition) {
-            foreach ($transition->from as $source) {
-                $bySource[$source][] = $transition;
+        foreach ($byEvent as $event => $candidates) {
+            foreach ($candidates as $transition) {
+                foreach ($transition->from as $source) {
+                    $bySource[$source][$event][] = $transition;
+                }
             }
         }
         $this->bySource = $bySource;
@@ -213,7 +218,11 @@ final readonly class Definition
      */
     public function unreachableStates(): array
     {
-        $reached = iterator_to_array($this->shortestPaths());
+        $reached = [];
+
+        foreach ($this->shortestPaths() as $state => $_events) {
+            $reached[$state] = true;
+        }
 
         return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
@@ -241,10 +250,12 @@ final readonly class Definition
 
             yield $state => $paths[$state];
 
-            foreach ($this->bySource[$state] ?? [] as $transition) {
-                if (!isset($paths[$transition->to])) {
-                    $paths[$transition->to] = [...$paths[$state], $transition->event];
-                    $queue[] = $transition->to;
+            foreach ($this->bySource[$state] ?? [] as $candidates) {
+                foreach ($candidates as $transition) {
+                    if (!isset($paths[$transition->to])) {
+                        $paths[$transition->to] = [...$paths[$state], $transition->event];
+                        $queue[] = $transition->to;
+                    }
                 }
             }
         }
@@ -266,6 +277,26 @@ final readonly class Definition
     public function hasEvent(string $event): bool
     {
         return isset($this->byEvent[$event]);
+    }
+
+    /**
+     * Transitions `$event` can take from `$state`, in declaration order (guards not evaluated).
+     *
+     * @return list<Transition>
+     */
+    public function transitionsFrom(string $state, string $event): array
+    {
+        return $this->bySource[$state][$event] ?? [];
+    }
+
+    /**
+     * Events with at least one transition leaving `$state`, in definition order (guards not evaluated).
+     *
+     * @return list<string>
+     */
+    public function eventsFrom(string $state): array
+    {
+        return array_map(strval(...), array_keys($this->bySource[$state] ?? []));
     }
 
     /**
