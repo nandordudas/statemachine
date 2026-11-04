@@ -54,16 +54,19 @@ final class RealWorldExamplesTest extends TestCase
     public function testTwoWorkersCannotBothApplyTheSameWebhook(): void
     {
         $row = ['status' => 'pending'];
-        $store = static fn(): AtomicCallbackStore => new AtomicCallbackStore(static function () use (&$row): string {
-            return $row['status'];
-        }, static function (string $expected, string $new) use (&$row): bool {
-            if ($row['status'] !== $expected) {
-                return false;
-            }
-            $row['status'] = $new;
+        // A closure (not an arrow function) so every store shares the same row by reference.
+        $store = static function () use (&$row): AtomicCallbackStore {
+            return new AtomicCallbackStore(static function () use (&$row): string {
+                return $row['status'];
+            }, static function (string $expected, string $new) use (&$row): bool {
+                if ($row['status'] !== $expected) {
+                    return false;
+                }
+                $row['status'] = $new;
 
-            return true;
-        });
+                return true;
+            });
+        };
 
         $workerA = PaymentFlow::machine(static fn() => null, $store());
         $workerB = PaymentFlow::machine(static fn() => null, $store());
