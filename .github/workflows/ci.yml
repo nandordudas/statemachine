@@ -1,0 +1,73 @@
+name: CI
+
+# Builds and verifies both Composer packages of this repository:
+#   - nandordudas/state-machine          (branch `main`,  PHP 8.5+)
+#   - nandordudas/state-machine-php72    (branch `php72`, PHP 7.2+)
+# Each matrix entry checks out its own branch, so a push to either branch verifies both.
+
+on:
+  push:
+    branches: [main, php72]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.package }} (PHP ${{ matrix.php }})
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: state-machine
+            ref: main
+            php: '8.5'
+          - package: state-machine-php72
+            ref: php72
+            php: '7.2'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Mago
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output mago.tar.gz
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf mago.tar.gz -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - run: composer validate --strict
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - run: mago --version
+      - run: mago fmt --check
+      - run: mago lint
+      - run: mago analyze
+
+      - run: composer analyse
+      - run: composer test
+
+      - name: Build package archive
+        run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}
+          path: dist/${{ matrix.package }}.zip
+          if-no-files-found: error
