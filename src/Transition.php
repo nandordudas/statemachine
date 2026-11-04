@@ -38,9 +38,9 @@ final readonly class Transition
 
     /**
      * @param string|BackedEnum|non-empty-list<string|BackedEnum> $from
-     * @param list<Guard|callable(TransitionContext): bool> $guards all must allow the transition
-     * @param list<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
-     * @param list<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
+     * @param array<Guard|callable(TransitionContext): bool> $guards all must allow the transition
+     * @param array<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
+     * @param array<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
      */
     public function __construct(
         string|BackedEnum $event,
