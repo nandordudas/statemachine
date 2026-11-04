@@ -202,6 +202,7 @@ final class MachineTest extends VideoTestCase
 
     public function testNestedSendFromBeforeHookIsRejected(): void
     {
+        /** @var Machine|null $machine */
         $machine = null;
         $definition = $this->video(extra: [
             Transition::on('FORCE_PAUSE', 'stopped', 'paused'),
