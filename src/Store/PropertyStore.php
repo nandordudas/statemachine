@@ -37,7 +37,19 @@ final readonly class PropertyStore implements StateStore
     {
         $value = $this->property->getValue($this->target);
 
-        return $value === null ? throw UnknownStateException::missing() : Name::of($value);
+        if ($value === null) {
+            throw UnknownStateException::missing();
+        }
+
+        if (!is_string($value) && !$value instanceof BackedEnum) {
+            throw new InvalidDefinitionException(sprintf(
+                'Property "%s" must hold a string or a backed enum, %s found.',
+                $this->property->getName(),
+                get_debug_type($value),
+            ));
+        }
+
+        return Name::of($value);
     }
 
     public function set(string $state): void
