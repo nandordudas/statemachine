@@ -127,11 +127,13 @@ function machineFor(
 
     return new Machine(
         $definition,
-        new AtomicCallbackStore(static fn(): string => $store->get(), $compareAndSet, static function (string $state) use (
-            $store,
-        ): void {
-            $store->set($state);
-        }),
+        new AtomicCallbackStore(
+            $store->get(...),
+            $compareAndSet,
+            static function (string $state) use ($store): void {
+                $store->set($state);
+            },
+        ),
         $history,
     );
 }

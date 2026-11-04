@@ -48,9 +48,7 @@ final readonly class PropertyStore implements StateStore
 
         $type = $this->property->getType();
         $name = $type instanceof ReflectionNamedType ? $type->getName() : null;
-        $this->enum = $name !== null && enum_exists($name) && is_subclass_of($name, BackedEnum::class)
-            ? $name
-            : null;
+        $this->enum = $name !== null && enum_exists($name) && is_subclass_of($name, BackedEnum::class) ? $name : null;
     }
 
     /**
@@ -104,8 +102,9 @@ final readonly class PropertyStore implements StateStore
             return;
         }
 
-        $this->property->setValue($this->target, $this->enum::tryFrom($state) ?? throw UnknownStateException::named(
-            $state,
-        ));
+        $this->property->setValue(
+            $this->target,
+            $this->enum::tryFrom($state) ?? throw UnknownStateException::named($state),
+        );
     }
 }

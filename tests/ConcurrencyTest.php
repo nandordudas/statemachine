@@ -58,14 +58,16 @@ final class ConcurrencyTest extends TestCase
 
     public function testAnotherFiberCannotSendWhileAnAfterHookIsSuspended(): void
     {
-        $machine = new Machine(Definition::builder()
-            ->initial('a')
-            ->states('a', 'b')
-            ->transition(
-                Transition::on('GO', 'a', 'b')->withAfter(static fn() => Fiber::suspend()),
-                Transition::on('BACK', 'b', 'a'),
-            )
-            ->build());
+        $machine = new Machine(
+            Definition::builder()
+                ->initial('a')
+                ->states('a', 'b')
+                ->transition(
+                    Transition::on('GO', 'a', 'b')->withAfter(static fn() => Fiber::suspend()),
+                    Transition::on('BACK', 'b', 'a'),
+                )
+                ->build(),
+        );
         $fiber = new Fiber(static fn() => $machine->send('GO'));
         $fiber->start();
 
@@ -132,13 +134,11 @@ final class ConcurrencyTest extends TestCase
         $workerA = new Machine($this->abc(Transition::on('GO', 'a', 'b')), $store());
         // B has planned GO and is in its before hook when A applies OTHER on the same row.
         $workerB = new Machine(
-            $this->abc(
-                Transition::on('GO', 'a', 'b')->withBefore(static function () use ($workerA): void {
-                    $workerA->send('OTHER');
-                })->withAbort(static function () use (&$aborted): void {
-                    $aborted = true;
-                }),
-            ),
+            $this->abc(Transition::on('GO', 'a', 'b')->withBefore(static function () use ($workerA): void {
+                $workerA->send('OTHER');
+            })->withAbort(static function () use (&$aborted): void {
+                $aborted = true;
+            })),
             $store(),
         );
 
@@ -215,20 +215,18 @@ final class ConcurrencyTest extends TestCase
         $definition = Definition::builder()
             ->initial('a')
             ->states('a', 'b')
-            ->transition(
-                Transition::on('GO', 'a', 'b')
-                    ->withGuard(static function () use (&$log): bool {
-                        $log[] = 'guard';
+            ->transition(Transition::on('GO', 'a', 'b')
+                ->withGuard(static function () use (&$log): bool {
+                    $log[] = 'guard';
 
-                        return true;
-                    })
-                    ->withBefore(static function () use (&$log): void {
-                        $log[] = 'before';
-                    })
-                    ->withAfter(static function () use (&$log): void {
-                        $log[] = 'after';
-                    }),
-            )
+                    return true;
+                })
+                ->withBefore(static function () use (&$log): void {
+                    $log[] = 'before';
+                })
+                ->withAfter(static function () use (&$log): void {
+                    $log[] = 'after';
+                }))
             ->build();
 
         new Machine($definition, $store)->send('GO');
@@ -239,25 +237,31 @@ final class ConcurrencyTest extends TestCase
 
     public function testLockingStoreRollsBackAndAbortsWhenTheWorkFails(): void
     {
-        $rolledBack = false;
+        $transaction = new class {
+            public bool $rolledBack = false;
+        };
         $aborted = false;
         $inner = new InMemoryStore('a');
-        $store = new LockingStore($inner, static function (\Closure $work) use (&$rolledBack): mixed {
+        $store = new LockingStore($inner, static function (\Closure $work) use ($transaction): mixed {
             try {
                 return $work();
             } catch (\Throwable $e) {
-                $rolledBack = true;
+                $transaction->rolledBack = true;
 
                 throw $e;
             }
         });
-        $definition = new Definition('a', ['a', 'b'], [
-            Transition::on('GO', 'a', 'b')
-                ->withBefore(static fn() => throw new \RuntimeException('no'))
-                ->withAbort(static function () use (&$aborted): void {
+        $definition = new Definition(
+            'a',
+            ['a', 'b'],
+            [
+                Transition::on('GO', 'a', 'b')->withBefore(
+                    static fn() => throw new \RuntimeException('no'),
+                )->withAbort(static function () use (&$aborted): void {
                     $aborted = true;
                 }),
-        ]);
+            ],
+        );
 
         try {
             new Machine($definition, $store)->send('GO');
@@ -265,7 +269,7 @@ final class ConcurrencyTest extends TestCase
         } catch (\RuntimeException) {
         }
 
-        self::assertTrue($rolledBack);
+        self::assertTrue($transaction->rolledBack);
         self::assertTrue($aborted);
         self::assertSame('a', $inner->get());
     }
@@ -283,9 +287,7 @@ final class ConcurrencyTest extends TestCase
     {
         $status = 'a';
         $store = new LockingStore(
-            new CallbackStore(static fn(): string => $status, static function (
-                string $s,
-            ) use (&$status): void {
+            new CallbackStore(static fn(): string => $status, static function (string $s) use (&$status): void {
                 $status = $s;
             }),
             static fn(\Closure $work): mixed => $work(),
@@ -307,11 +309,10 @@ final class ConcurrencyTest extends TestCase
 
             return true;
         };
-        $definition = Definition::fromTable(S::Stopped, [[E::Play, S::Stopped, S::Playing], [
-            E::Pause,
-            S::Stopped,
-            S::Paused,
-        ]]);
+        $definition = Definition::fromTable(S::Stopped, [
+            [E::Play,  S::Stopped, S::Playing],
+            [E::Pause, S::Stopped, S::Paused],
+        ]);
         $copyA = new class {
             public S $status = S::Stopped;
         };
