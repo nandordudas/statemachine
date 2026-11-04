@@ -4,8 +4,16 @@
     "type": "library",
     "license": "MIT",
     "keywords": ["state machine", "fsm", "workflow", "xstate"],
+    "homepage": "https://github.com/nandordudas/statemachine",
+    "support": {
+        "issues": "https://github.com/nandordudas/statemachine/issues",
+        "source": "https://github.com/nandordudas/statemachine/tree/php72"
+    },
     "require": {
         "php": ">=7.2"
+    },
+    "conflict": {
+        "nandordudas/state-machine": "*"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^2.19",
