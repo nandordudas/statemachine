@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Document Approval Workflow",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      980,
+      566
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Writing"
+    },
+    {
+      "id": "retired",
+      "label": "Retired"
+    }
+  ],
+  "states": [
+    {
+      "id": "draft",
+      "type": "start",
+      "label": "draft",
+      "sublabel": "author edits",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "review",
+      "type": "waiting",
+      "label": "review",
+      "sublabel": "onExit: clear reviewer",
+      "lane": "main",
+      "col": 2,
+      "step": "02",
+      "tag": "In review"
+    },
+    {
+      "id": "published",
+      "type": "success",
+      "label": "published",
+      "sublabel": "onEnter: notify",
+      "lane": "main",
+      "col": 4,
+      "step": "03"
+    },
+    {
+      "id": "archived",
+      "type": "neutral",
+      "label": "archived",
+      "sublabel": "final",
+      "lane": "retired",
+      "col": 2,
+      "tag": "terminal"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "submit",
+      "from": "draft",
+      "to": "review",
+      "label": "SUBMIT"
+    },
+    {
+      "id": "approve",
+      "from": "review",
+      "to": "published",
+      "label": "APPROVE [approver]",
+      "variant": "security"
+    },
+    {
+      "id": "fast-track",
+      "from": "draft",
+      "to": "published",
+      "label": "SUBMIT [trusted author]",
+      "variant": "emphasis",
+      "toSide": "top",
+      "route": "top-channel"
+    },
+    {
+      "id": "reject",
+      "from": "review",
+      "to": "draft",
+      "label": "REJECT [approver]",
+      "route": "bottom-channel",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom"
+    },
+    {
+      "id": "archive",
+      "from": "published",
+      "to": "archived",
+      "label": "ARCHIVE",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Branching",
+      "items": [
+        "Two SUBMIT transitions leave draft",
+        "The guarded one is declared first and wins for trusted authors",
+        "Everyone else goes to review"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "ApproverGuard",
+      "items": [
+        "APPROVE and REJECT need the approver role",
+        "Authors cannot review their own documents",
+        "blockers() reports which rule failed"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Hooks",
+      "items": [
+        "Leaving review clears the reviewer",
+        "Entering published notifies subscribers",
+        "Labels live in transition meta"
+      ]
+    }
+  ]
+}

@@ -25,6 +25,11 @@ $video->availableEvents(); // ['PAUSE', 'STOP']
 $video->can('PLAY');       // false
 ```
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="preview/video.dark.png">
+  <img src="preview/video.light.png" alt="State diagram of the video player: stopped, playing and paused; PLAY needs a licence, PAUSE and STOP leave playing.">
+</picture>
+
 ## Shorthand helpers
 
 ```php
@@ -134,9 +139,29 @@ foreach ($doc->availableTransitions($payload) as $t) {   // the transitions, for
 
 ## Examples
 
-- `examples/OrderStatus`: a 31-status matrix checked against legacy rules.
-- `examples/Payment`: conditional branching on a gateway answer, an amount guard, an enter hook, an atomic store.
-- `examples/Document`: approval workflow over an entity holding a status enum via `CallbackStore`, a named `ApproverGuard`, enter/exit hooks.
+Diagrams are in [`preview/`](preview/); open the `.html` files for an interactive view (search, focus, trace, export).
+
+**`examples/Document`**: approval workflow over an entity holding a status enum via `CallbackStore`, a named
+`ApproverGuard` that explains its refusals, enter/exit hooks, button labels in transition metadata.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="preview/document.dark.png">
+  <img src="preview/document.light.png" alt="Document approval: draft to review to published, a trusted-author shortcut, REJECT back to draft, ARCHIVE to archived.">
+</picture>
+
+**`examples/Payment`**: conditional branching on a gateway answer, an amount guard, an enter hook, an atomic store.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="preview/payment.dark.png">
+  <img src="preview/payment.light.png" alt="Card payment: pending to authorized to captured; declined, voided and refunded endings.">
+</picture>
+
+**`examples/OrderStatus`**: a 31-status matrix checked against legacy rules, shown here by status group.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="preview/order-status.dark.png">
+  <img src="preview/order-status.light.png" alt="Order status groups: new, incoming, serving, served, returned, with inactive and sent-back.">
+</picture>
 
 ## Semantics
 

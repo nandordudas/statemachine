@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Order Status Groups",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      980,
+      566
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Fulfilment"
+    },
+    {
+      "id": "inactive",
+      "label": "Stopped"
+    },
+    {
+      "id": "external",
+      "label": "Carrier"
+    }
+  ],
+  "states": [
+    {
+      "id": "new",
+      "type": "start",
+      "label": "new",
+      "sublabel": "no status yet",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "incoming",
+      "type": "waiting",
+      "label": "active/incoming",
+      "sublabel": "8 statuses",
+      "lane": "main",
+      "col": 1,
+      "step": "02"
+    },
+    {
+      "id": "serving",
+      "type": "active",
+      "label": "active/serving",
+      "sublabel": "14 statuses",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "served",
+      "type": "success",
+      "label": "served",
+      "sublabel": "completed",
+      "lane": "main",
+      "col": 3,
+      "step": "04"
+    },
+    {
+      "id": "returned",
+      "type": "neutral",
+      "label": "returned",
+      "sublabel": "taken back in",
+      "lane": "main",
+      "col": 4,
+      "step": "05"
+    },
+    {
+      "id": "inactive",
+      "type": "failure",
+      "label": "inactive",
+      "sublabel": "forgone, cancelled, failed…",
+      "lane": "inactive",
+      "col": 0,
+      "tag": "5 statuses"
+    },
+    {
+      "id": "sent-back",
+      "type": "external",
+      "label": "sent-back",
+      "sublabel": "customer withdrew",
+      "lane": "external",
+      "col": 2
+    }
+  ],
+  "transitions": [
+    {
+      "id": "intake",
+      "from": "new",
+      "to": "incoming"
+    },
+    {
+      "id": "serve",
+      "from": "incoming",
+      "to": "serving"
+    },
+    {
+      "id": "complete",
+      "from": "serving",
+      "to": "served",
+      "variant": "security"
+    },
+    {
+      "id": "return",
+      "from": "served",
+      "to": "returned"
+    },
+    {
+      "id": "requeue",
+      "from": "serving",
+      "to": "incoming",
+      "route": "top-channel",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "id": "stop",
+      "from": "serving",
+      "to": "inactive",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "variant": "dashed"
+    },
+    {
+      "id": "forgo",
+      "from": "served",
+      "to": "inactive",
+      "label": "forgone",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "take-back",
+      "from": "sent-back",
+      "to": "returned",
+      "label": "returned",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Group rules",
+      "items": [
+        "The event is the status to move to",
+        "Moves inside a group are always allowed",
+        "new may also start in serving or inactive",
+        "incoming and inactive move both ways"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "LocalPickupGuard",
+      "items": [
+        "Guards every move (highlighted into served)",
+        "shop-packable and shop-receivable need local pickup",
+        "With local pickup, completed only follows shop-receivable"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Leaving served",
+      "items": [
+        "completed is left by status, not by group",
+        "Only to forgone or returned"
+      ]
+    }
+  ]
+}
