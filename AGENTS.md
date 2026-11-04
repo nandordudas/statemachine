@@ -1,7 +1,9 @@
 # AGENTS.md
 
 Guidance for AI coding agents working on, or *using*, this library (`nandordudas/state-machine`, PHP 8.5+).
-A hand-port for PHP 7.2 (no enums) lives on branch `php72` (`nandordudas/state-machine-php72`).
+This is the `2.x` line of the Composer package `nandordudas/state-machine`. A hand-port for PHP 7.2 (no enums) lives on
+branch `php72` and is the `1.x` line of the same package; Composer picks the newest line the running PHP supports.
+Never add a `conflict` on `nandordudas/state-machine` or rename the package: Packagist then skips a branch.
 
 ## What this is
 
@@ -15,6 +17,7 @@ A small finite state machine. A `Definition` (immutable blueprint: states, initi
 - Keep the API additive and update the README semantics table when behaviour changes.
 - Every behaviour change needs a test (`tests/`); examples live in `examples/` and are checked in `tests/Examples`.
 - Keep `main` and `php72` in step: a feature added here should be ported (hand-port, no enums) to `php72`.
+  Tag `v2.Y.Z` here and the matching `v1.Y.Z` there.
 
 ## Using the library
 

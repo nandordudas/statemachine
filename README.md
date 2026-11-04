@@ -121,7 +121,9 @@ interface property (`public string $state { get; }`), `array_find`/`array_any`/`
 
 ## PHP 7.2
 
-A hand-port without enums lives on branch `php72` (package `nandordudas/state-machine-php72`).
+This is the `2.x` line of `nandordudas/state-machine`. A hand-port without enums for PHP 7.2 to 8.4 lives on branch
+`php72` and is the `1.x` line of the same package; `composer require nandordudas/state-machine` picks the newest
+line your PHP supports (pin `^1.0` to stay on the string-based API).
 
 ## Develop
 
