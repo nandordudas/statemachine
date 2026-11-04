@@ -17,26 +17,52 @@ use Dudas\StateMachine\Name;
  *     new AtomicCallbackStore(
  *         fn () => $order->status,
  *         fn (string $expected, string $new): bool => $repo->updateStatus($order->id, $expected, $new) === 1,
+ *         afterWrite: fn (string $new) => $order->status = $new,   // keep the entity in step with the row
  *     );
+ *
+ * When the reader cannot see a successful write yet (it still returns the state the write replaced, e.g. an
+ * entity property nobody updated), the store reports the state it wrote, so the machine does not get stuck on
+ * the old one. The next compareAndSet still checks the real stored value, so this never hides a race.
  */
-final readonly class AtomicCallbackStore implements AtomicStateStore
+final class AtomicCallbackStore implements AtomicStateStore
 {
+    /** @var array{string, string}|null [state the last write replaced, state it wrote] */
+    private ?array $written = null;
+
     /**
      * @param Closure(): (string|BackedEnum|null) $reader
      * @param Closure(string, string): bool $compareAndSet receives (expected, new); returns whether it wrote
+     * @param (Closure(string): mixed)|null $afterWrite runs after a successful write, e.g. to update the entity
      */
     public function __construct(
-        private Closure $reader,
-        private Closure $compareAndSet,
+        private readonly Closure $reader,
+        private readonly Closure $compareAndSet,
+        private readonly ?Closure $afterWrite = null,
     ) {}
 
     public function get(): string
     {
         $state = ($this->reader)();
 
-        return $state === null ? throw UnknownStateException::missing() : Name::of($state);
+        if ($state === null) {
+            throw UnknownStateException::missing();
+        }
+
+        $state = Name::of($state);
+
+        if ($this->written !== null && $state === $this->written[0]) {
+            return $this->written[1]; // the reader has not caught up with our own write
+        }
+
+        $this->written = null;
+
+        return $state;
     }
 
+    /**
+     * An unconditional write is not possible through a compare-and-set callback: this writes only if
+     * nobody changed the state since it was read here, and throws otherwise.
+     */
     public function set(string $state): void
     {
         $expected = $this->get();
@@ -48,6 +74,16 @@ final readonly class AtomicCallbackStore implements AtomicStateStore
 
     public function compareAndSet(string $expected, string $state): bool
     {
-        return ($this->compareAndSet)($expected, $state);
+        if (!($this->compareAndSet)($expected, $state)) {
+            return false;
+        }
+
+        if ($this->afterWrite !== null) {
+            ($this->afterWrite)($state);
+        }
+
+        $this->written = $expected === $state ? null : [$expected, $state];
+
+        return true;
     }
 }
