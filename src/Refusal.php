@@ -20,10 +20,12 @@ final readonly class Refusal
 
     /**
      * @param self::UNKNOWN_EVENT|self::NOT_ALLOWED|self::GUARD_REJECTED $reason
+     * @param array<string, mixed> $payload kept to explain a guard rejection, should anyone ask
      */
     public function __construct(
         public string $event,
         public string $from,
         public string $reason,
+        public array $payload = [],
     ) {}
 }

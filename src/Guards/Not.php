@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Guards;
 
 use Dudas\StateMachine\ClosureGuard;
+use Dudas\StateMachine\Contracts\ExplainingGuard;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\TransitionContext;
 
 /** Inverts a guard. */
-final readonly class Not implements Guard
+final readonly class Not implements ExplainingGuard
 {
     private Guard $guard;
 
@@ -24,5 +25,13 @@ final readonly class Not implements Guard
     public function allows(TransitionContext $context): bool
     {
         return !$this->guard->allows($context);
+    }
+
+    /**
+     * The inner guard allowed, which gives no reason to show: wrap the Not in {@see Because} for a message.
+     */
+    public function blockers(TransitionContext $context): array
+    {
+        return $this->allows($context) ? [] : [Explain::generic($this)];
     }
 }

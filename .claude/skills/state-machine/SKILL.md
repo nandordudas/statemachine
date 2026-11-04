@@ -50,6 +50,9 @@ generator process that receives each result).
 
 - Guards: pure and cheap. Combine with `allOf`, `anyOf`, `not`, `payloadIs`, `payloadsEqual`, or a named `Guard` class
   when the rule is reused (see `examples/Document/ApproverGuard.php`).
+- When users need to know *why* they can't do something, explain the guards: `because($guard, 'message', code: '...')`
+  or an `ExplainingGuard` class, then show `$machine->blockers($event, $payload)`. Put labels, styles and the
+  `blocked` message in `meta` and render buttons from `availableTransitions()`.
 - Side effects go in hooks. `before`/`onExit` can veto; `onEnter`/`after` run after the write and failures are wrapped
   in `AfterHookFailedException` (no rollback).
 - Never call `send()` inside guards or `before`/`onExit` (`ConcurrentTransitionException`); from `onEnter`/`after` it is

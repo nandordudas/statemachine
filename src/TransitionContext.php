@@ -11,11 +11,13 @@ final readonly class TransitionContext
 {
     /**
      * @param array<string, mixed> $payload data passed along with the event
+     * @param array<string, mixed> $meta the transition's metadata (labels, required roles, messages)
      */
     public function __construct(
         public string $event,
         public string $from,
         public string $to,
         public array $payload = [],
+        public array $meta = [],
     ) {}
 }

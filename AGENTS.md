@@ -50,7 +50,7 @@ Pipeline of `send()`: select transition (guards, first permitted wins) → `befo
 |---|---|
 | Unknown event | `UnknownEventException` |
 | No transition from current state | `TransitionNotAllowedException` |
-| All guards veto | `GuardRejectedException` (subclass of the above) |
+| All guards veto | `GuardRejectedException` (subclass of the above; `->blockers()` lists the reasons) |
 | `before`/`onExit` hook throws | aborted, state unchanged, `abort` hooks run, exception propagates |
 | `send()` from a `before`/`onExit` hook or a guard, from another fiber mid-transition, or state changed concurrently | `ConcurrentTransitionException` |
 | `send()` from an `onEnter`/`after` hook | queued, applied after the current transition; a cycle ends in `ChainLimitExceededException` |
@@ -61,6 +61,10 @@ hooks only. Use `AtomicStateStore` (`AtomicCallbackStore`, `machineFor(..., comp
 between writers, `LockingStore` when guards read more than the state; compensate `before` side effects in `abort` hooks.
 Generators: `$machine->stream($events)` yields a `TransitionResult` per event, `$machine->drive($generator)` feeds results
 back into a process, `$definition->shortestPaths()` yields the events reaching each state.
+Reasons: `$machine->blockers($event, $payload)` returns `list<Blocker>` (code, message, parameters), empty when allowed;
+explain a guard with `because($guard, 'message', code: '...')` or implement `ExplainingGuard`; `meta['blocked']` on a
+transition words a guard that gives no reason. Metadata: `meta:` on `on()`/`->withMeta()`, `->meta($state, [...])` on the
+builder, `$context->meta` in guards and hooks, `availableTransitions()` for UIs, `label` shown in diagrams.
 Diagnostics: `$definition->toMermaid()`, `toDot()`, `unreachableStates()`; opt-in `machine(..., history: true|N)->history()`.
 
 ## Commands

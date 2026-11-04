@@ -48,12 +48,16 @@ final readonly class Definition
     /** @var array<string, list<Hook>> run before the machine leaves the state */
     private array $onExit;
 
+    /** @var array<string, array<string, mixed>> metadata by state name */
+    private array $stateMeta;
+
     /**
      * @param string|BackedEnum $initial
      * @param list<string|BackedEnum> $states
      * @param array<mixed> $transitions every element must be a {@see Transition}
      * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onEnter hooks by state name
      * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onExit hooks by state name
+     * @param array<string, array<string, mixed>> $stateMeta metadata by state name (`label` is shown in diagrams)
      */
     public function __construct(
         string|BackedEnum $initial,
@@ -61,6 +65,7 @@ final readonly class Definition
         array $transitions,
         array $onEnter = [],
         array $onExit = [],
+        array $stateMeta = [],
     ) {
         $initial = Name::of($initial);
         $known = Name::listOf($states);
@@ -102,11 +107,13 @@ final readonly class Definition
             $checked[] = $transition;
         }
 
-        foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
+        $byStateName = ['onEnter hook' => $onEnter, 'onExit hook' => $onExit, 'Metadata' => $stateMeta];
+
+        foreach ($byStateName as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
                 if (!isset($index[$state])) {
                     throw new InvalidDefinitionException(sprintf(
-                        '%s hook refers to undeclared state "%s".',
+                        '%s refers to undeclared state "%s".',
                         $kind,
                         $state,
                     ));
@@ -116,6 +123,7 @@ final readonly class Definition
 
         $this->onEnter = self::normalizeHooks($onEnter);
         $this->onExit = self::normalizeHooks($onExit);
+        $this->stateMeta = $stateMeta;
         $this->initial = $initial;
         $this->states = $known;
         $this->transitions = $checked;
@@ -301,6 +309,16 @@ final readonly class Definition
     public function transitionsFor(string $event): array
     {
         return $this->byEvent[$event] ?? [];
+    }
+
+    /**
+     * Metadata of a state (empty when none was given).
+     *
+     * @return array<string, mixed>
+     */
+    public function metaFor(string|BackedEnum $state): array
+    {
+        return $this->stateMeta[Name::of($state)] ?? [];
     }
 
     /**

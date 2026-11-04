@@ -6,11 +6,13 @@ namespace Dudas\StateMachine;
 
 use BackedEnum;
 use Closure;
+use Dudas\StateMachine\Contracts\ExplainingGuard;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Contracts\StateStore;
 use Dudas\StateMachine\Guards\AllOf;
 use Dudas\StateMachine\Guards\AnyOf;
+use Dudas\StateMachine\Guards\Because;
 use Dudas\StateMachine\Guards\Not;
 use Dudas\StateMachine\Guards\PayloadIs;
 use Dudas\StateMachine\Guards\PayloadsEqual;
@@ -29,6 +31,7 @@ use Dudas\StateMachine\Store\PropertyStore;
  * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $before
  * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $after
  * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $abort
+ * @param array<string, mixed> $meta labels, required roles, the `blocked` message (see {@see Transition::$meta})
  */
 function on(
     string|BackedEnum $event,
@@ -38,8 +41,18 @@ function on(
     Hook|callable|array $before = [],
     Hook|callable|array $after = [],
     Hook|callable|array $abort = [],
+    array $meta = [],
 ): Transition {
-    return new Transition($event, $from, $to, listOf($guard), listOf($before), listOf($after), listOf($abort));
+    return new Transition(
+        $event,
+        $from,
+        $to,
+        listOf($guard),
+        listOf($before),
+        listOf($after),
+        listOf($abort),
+        $meta,
+    );
 }
 
 /**
@@ -57,6 +70,7 @@ function on(
  * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onEnter
  * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onExit
  * @param bool|int $history true records every transition, a positive int only the latest N
+ * @param array<string, array<string, mixed>> $stateMeta metadata by state name
  */
 function machine(
     string|BackedEnum $initial,
@@ -67,6 +81,7 @@ function machine(
     ?StateStore $store = null,
     bool|int $history = false,
     int $maxChainedEvents = 100,
+    array $stateMeta = [],
 ): Machine {
     $states = is_string($states) ? $states::cases() : $states;
 
@@ -77,6 +92,7 @@ function machine(
             $transitions,
             array_map(listOf(...), $onEnter),
             array_map(listOf(...), $onExit),
+            $stateMeta,
         ),
         $store,
         $history,
@@ -132,6 +148,24 @@ function machineFor(
         }),
         $history,
     );
+}
+
+/**
+ * Guard with a reason: `$guard`, explained by `$message` when it refuses (see {@see Machine::blockers()}).
+ *
+ *     because(payloadIs('role', 'approver'), 'Only approvers can approve.', code: 'not_approver')
+ *
+ * @param Guard|callable(TransitionContext): bool $guard
+ * @param string|Closure(TransitionContext): string $message
+ * @param array<string, mixed> $parameters
+ */
+function because(
+    Guard|callable $guard,
+    string|Closure $message,
+    string $code = 'rejected',
+    array $parameters = [],
+): ExplainingGuard {
+    return new Because($guard, $message, $code, $parameters);
 }
 
 /** Guard: every inner guard allows. */
