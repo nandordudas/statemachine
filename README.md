@@ -1,7 +1,12 @@
-# state-machine
+# state-machine (PHP 7.2 port)
 
-A small, strictly typed finite state machine for PHP 8.5. A modern rewrite of
-[mouadziani/xstate](https://github.com/mouadziani/xstate).
+A small, strictly typed finite state machine for **PHP 7.2+**. This is the `php72` branch / package
+`nandordudas/state-machine-php72`: a hand-port of the PHP 8.5 library on `main`
+(`nandordudas/state-machine`), with the same concepts and nearly the same API.
+
+Differences from the PHP 8.5 version: states and events are plain **strings** (no enums), the state is
+`$machine->state()` (also readable as `$machine->state`), there are no named arguments, and value-object properties
+are `@readonly` by convention instead of enforced.
 
 ```php
 use Dudas\StateMachine\{Definition, Machine, Transition, TransitionContext};
@@ -10,17 +15,17 @@ $definition = Definition::builder()
     ->initial('stopped')
     ->states('playing', 'stopped', 'paused')
     ->transition(
-        Transition::on('PLAY', from: ['stopped', 'paused'], to: 'playing')
-            ->withGuard(fn (TransitionContext $c) => $c->payload['licensed'] ?? false)
-            ->withAfter(fn (TransitionContext $c) => $log->info("{$c->from} -> {$c->to}")),
+        Transition::on('PLAY', ['stopped', 'paused'], 'playing')
+            ->withGuard(function (TransitionContext $c) { return $c->payload['licensed'] ?? false; })
+            ->withAfter(function (TransitionContext $c) use ($log) { $log->info("{$c->from} -> {$c->to}"); }),
         Transition::on('PAUSE', 'playing', 'paused'),
-        Transition::on('STOP', 'playing', 'stopped'),
+        Transition::on('STOP', 'playing', 'stopped')
     )
     ->build();
 
 $video = new Machine($definition);
 $video->send('PLAY', ['licensed' => true]);
-$video->state;             // 'playing'
+$video->state();           // 'playing'
 $video->availableEvents(); // ['PAUSE', 'STOP']
 $video->can('PLAY');       // false
 ```
@@ -28,65 +33,28 @@ $video->can('PLAY');       // false
 ## Shorthand helpers
 
 ```php
-use function Dudas\StateMachine\{machine, on};
+use function Dudas\StateMachine\{machine, on, allOf, not, payloadIs, payloadsEqual, machineFor};
 
-$doc = machine(
-    initial: S::Draft,
-    states: S::class,                                  // an enum class lists all its cases
-    transitions: [
-        on(E::Submit, S::Draft, S::Review),
-        on(E::Approve, S::Review, S::Published, guard: new ApproverGuard(), after: $audit),
-    ],
-    onEnter: [S::Published->value => $notify],
-);
+$doc = machine('draft', ['draft', 'review', 'published'], [
+    on('SUBMIT', 'draft', 'review'),
+    on('APPROVE', 'review', 'published', allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
+], ['published' => $notify]);                          // onEnter hooks by state
 
-$doc->sendIfAllowed(E::Approve, $payload);             // bool, never throws for a refusal
-$result = $doc->tryTransition(E::Approve, $payload);   // ->ok(), ->failure (why), ->state
+$doc->sendIfAllowed('APPROVE', $payload);              // bool, never throws for a refusal
+$result = $doc->tryTransition('APPROVE', $payload);    // ->ok(), ->failure (why), ->state
+$doc->sendAll(['SUBMIT', ['APPROVE', $payload]]);
+
+$flow = machineFor($definition, $entity, 'status');    // state lives in $entity->status (string)
+$definition->toMermaid();                              // stateDiagram-v2 text; toDot() for Graphviz
+$definition->unreachableStates();                      // lint: states nothing can reach
 ```
 
-`Definition::fromTable($initial, [[E::Submit, S::Draft, S::Review], ...])` builds a guard-less definition
-from plain rows. `sendIfAllowed`/`tryTransition` only absorb refusals (unknown event, not allowed, guard veto);
-hook and concurrency failures still throw.
-
-### More sugar
-
-```php
-use function Dudas\StateMachine\{allOf, not, payloadIs, payloadsEqual, machineFor};
-
-// guards as values: no one-off class for simple rules
-on(E::Approve, S::Review, S::Published,
-    guard: allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author'))));
-
-$flow = machineFor($definition, $document);       // state lives in $document->status (string or enum typed)
-$flow->sendAll([E::Submit, [E::Approve, $payload]]);
-
-$definition->toMermaid();                         // stateDiagram-v2 text; toDot() for Graphviz
-$definition->unreachableStates();                 // lint: states nothing can reach
-machine(..., history: true)->history();           // opt-in log of applied transitions
-```
-
-`anyOf()` is the OR counterpart of `allOf()`. History grows without bound, so it is off by default.
-
-## Design
-
-- `Definition` is an immutable, validated blueprint (shareable); `Machine` is the runtime instance.
-- State lives in a `StateStore` (`InMemoryStore` by default, `CallbackStore` to drive a property of an entity).
-- States and events may be strings or backed enums.
-- Guards (`Guard`) and hooks (`Hook`) are interfaces; closures are wrapped automatically.
-- Several transitions may share event + source state; the first whose guards pass wins.
-- Exceptions all implement `StateMachineException`; an invalid event/state (`TransitionNotAllowedException`)
-  is distinct from a guard veto (`GuardRejectedException`, a subclass).
-
-## Examples
-
-- `examples/OrderStatus`: a 31-status matrix checked against legacy rules.
-- `examples/Payment`: conditional branching on a gateway answer, an amount guard, an enter hook, an atomic store.
-- `examples/Document`: approval workflow over an entity holding a status enum via `CallbackStore`, a named `ApproverGuard`, enter/exit hooks.
+`Definition::fromTable('draft', [['SUBMIT', 'draft', 'review'], ...])` builds a guard-less definition from rows.
+Machine history is opt-in: `new Machine($definition, $store, true)` then `->history()`.
 
 ## Semantics
 
 `send()` runs: select transition (guards) → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
-`onEnter`/`onExit` are per-state hooks registered on the builder (`->onEnter('playing', fn ($c) => ...)`).
 
 | Situation | Result |
 |---|---|
@@ -94,33 +62,31 @@ machine(..., history: true)->history();           // opt-in log of applied trans
 | No transition from the current state | `TransitionNotAllowedException` |
 | Transition exists but every guard vetoes | `GuardRejectedException` |
 | `before` or `onExit` hook throws | transition aborted, state unchanged, exception propagates |
-| State changed during `before` hooks (nested `send`) | `ConcurrentTransitionException`, stale transition not applied |
-| `onEnter`/`after` hook throws | state is already changed and is **not** rolled back; wrapped in `AfterHookFailedException` (original in `getPrevious()`, context in `->context`) |
+| `send()` from a `before`/`onExit` hook, or the state changed meanwhile | `ConcurrentTransitionException` |
+| `onEnter`/`after` hook throws | state already changed, **not** rolled back; `AfterHookFailedException` |
 | Store holds an unknown or missing state | `UnknownStateException` |
 
-Hooks must not call `send()` from `before`/`onExit` (`ConcurrentTransitionException`); chaining from `onEnter`/`after` is fine.
-Stores shared between writers should implement `AtomicStateStore` (`compareAndSet($expected, $new)`;
-`InMemoryStore` and `AtomicCallbackStore` do). The machine then refuses a write that lost the race
-with `ConcurrentTransitionException`; plain stores only get the check made before the write.
-
-States and events must be strings or **string-backed** enums; int-backed enums are rejected.
-Guards may run twice (`can()` then `send()`), so keep them side-effect free.
-
-## Differences from xstate (mouadziani)
-
-- Guards receive a `TransitionContext` (event, from, to, payload) instead of `($from, $to)`.
-- `before`/`after` hooks work (the original `after()` overwrote `before`); `before` can abort.
-- No `__call` magic (`$video->play()`): not statically analysable. Use `send()` with an enum.
-- Definition is validated up front: undeclared states and missing initial state fail fast.
-
-## PHP 8.5 features used (for the later downgrade)
-
-`clone($obj, [...])` with-ers on readonly classes, `#[\NoDiscard]`, property hooks and an
-interface property (`public string $state { get; }`), `array_find`/`array_any`/`array_all`,
-`readonly` classes, first-class callable syntax.
+Stores shared between writers should implement `AtomicStateStore` (`compareAndSet`); `InMemoryStore` and
+`AtomicCallbackStore` do. Guards may run twice (`can()` then `send()`), so keep them side-effect free.
 
 ## Develop
 
 ```
-composer install && composer check   # phpstan (max) + phpunit
+composer install && composer check   # phpstan (max) + phpunit 8
+mago fmt --check && mago lint && mago analyze
 ```
+
+Mago has no PHP 7.2 mode (minimum 8.0), so `mago.toml` analyses as 8.0 and disables the rules that would suggest
+PHP 7.3+/8.0 syntax.
+
+## Editor and agent setup
+
+- `.vscode/`: recommended extensions (Intelephense, Mago, PHPStan, PHPUnit test explorer, Xdebug, EditorConfig, TOML),
+  format-on-save with Mago, and tasks for `composer check` and the Mago commands. `.editorconfig` sets 4-space PHP.
+- `AGENTS.md` (and `CLAUDE.md` importing it): conventions and the 7.2 syntax rules for AI coding agents.
+- `.claude/skills/state-machine/`: a Claude skill that teaches modelling workflows with this library.
+
+## CI
+
+`.github/workflows/ci.yml` builds and verifies both packages (`main` on PHP 8.5, `php72` on PHP 7.2) with Mago,
+PHPStan and PHPUnit, and uploads each package as a `composer archive` zip artifact.
