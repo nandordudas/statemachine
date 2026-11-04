@@ -47,12 +47,16 @@ final class MemoryTest extends TestCase
         gc_collect_cycles();
         $growth = memory_get_usage() - $before;
 
-        self::assertLessThan(self::TOLERANCE, $growth, sprintf(
-            'Memory grew by %d bytes over %d operations (%.1f B/op).',
+        self::assertLessThan(
+            self::TOLERANCE,
             $growth,
-            self::ITERATIONS,
-            $growth / self::ITERATIONS,
-        ));
+            sprintf(
+                'Memory grew by %d bytes over %d operations (%.1f B/op).',
+                $growth,
+                self::ITERATIONS,
+                $growth / self::ITERATIONS,
+            ),
+        );
     }
 
     private static function toggle(): Definition
@@ -72,13 +76,19 @@ final class MemoryTest extends TestCase
         }];
 
         yield 'send with guards and hooks' => [static function (): Closure {
-            $machine = new Machine(new Definition('off', ['off', 'on'], [
-                Transition::on('FLIP', 'off', 'on')
-                    ->withGuard(static fn(): bool => true)
-                    ->withBefore(static fn() => null)
-                    ->withAfter(static fn() => null),
-                Transition::on('FLIP', 'on', 'off'),
-            ]));
+            $machine = new Machine(
+                new Definition(
+                    'off',
+                    ['off', 'on'],
+                    [
+                        Transition::on('FLIP', 'off', 'on')
+                            ->withGuard(static fn(): bool => true)
+                            ->withBefore(static fn() => null)
+                            ->withAfter(static fn() => null),
+                        Transition::on('FLIP', 'on', 'off'),
+                    ],
+                ),
+            );
 
             return static fn() => $machine->send('FLIP');
         }];
@@ -104,10 +114,18 @@ final class MemoryTest extends TestCase
         }];
 
         yield 'failing after hook' => [static function (): Closure {
-            $machine = new Machine(new Definition('off', ['off', 'on'], [
-                Transition::on('FLIP', 'off', 'on')->withAfter(static fn() => throw new \RuntimeException('late')),
-                Transition::on('FLIP', 'on', 'off'),
-            ]));
+            $machine = new Machine(
+                new Definition(
+                    'off',
+                    ['off', 'on'],
+                    [
+                        Transition::on('FLIP', 'off', 'on')->withAfter(
+                            static fn() => throw new \RuntimeException('late'),
+                        ),
+                        Transition::on('FLIP', 'on', 'off'),
+                    ],
+                ),
+            );
 
             return static function () use ($machine): void {
                 try {
@@ -118,11 +136,17 @@ final class MemoryTest extends TestCase
         }];
 
         yield 'failing before hook with abort hook' => [static function (): Closure {
-            $machine = new Machine(new Definition('a', ['a', 'b'], [
-                Transition::on('GO', 'a', 'b')
-                    ->withBefore(static fn() => throw new \RuntimeException('no'))
-                    ->withAbort(static fn() => null),
-            ]));
+            $machine = new Machine(
+                new Definition(
+                    'a',
+                    ['a', 'b'],
+                    [
+                        Transition::on('GO', 'a', 'b')->withBefore(
+                            static fn() => throw new \RuntimeException('no'),
+                        )->withAbort(static fn() => null),
+                    ],
+                ),
+            );
 
             return static function () use ($machine): void {
                 try {
@@ -133,9 +157,17 @@ final class MemoryTest extends TestCase
         }];
 
         yield 'guard throwing inside can' => [static function (): Closure {
-            $machine = new Machine(new Definition('a', ['a', 'b'], [
-                Transition::on('GO', 'a', 'b')->withGuard(static fn(): bool => throw new \RuntimeException('guard')),
-            ]));
+            $machine = new Machine(
+                new Definition(
+                    'a',
+                    ['a', 'b'],
+                    [
+                        Transition::on('GO', 'a', 'b')->withGuard(
+                            static fn(): bool => throw new \RuntimeException('guard'),
+                        ),
+                    ],
+                ),
+            );
 
             return static function () use ($machine): void {
                 try {
@@ -147,14 +179,16 @@ final class MemoryTest extends TestCase
 
         yield 'events chained from hooks' => [static function (): Closure {
             $ref = new MachineRef();
-            $ref->machine = new Machine(Definition::builder()
-                ->initial('x')
-                ->states('x', 'y')
-                ->onEnter('y', static function () use ($ref): void {
-                    $ref->get()->send('BACK');
-                })
-                ->transition(Transition::on('GO', 'x', 'y'), Transition::on('BACK', 'y', 'x'))
-                ->build());
+            $ref->machine = new Machine(
+                Definition::builder()
+                    ->initial('x')
+                    ->states('x', 'y')
+                    ->onEnter('y', static function () use ($ref): void {
+                        $ref->get()->send('BACK');
+                    })
+                    ->transition(Transition::on('GO', 'x', 'y'), Transition::on('BACK', 'y', 'x'))
+                    ->build(),
+            );
 
             return static fn() => $ref->get()->send('GO');
         }];
@@ -167,14 +201,17 @@ final class MemoryTest extends TestCase
 
         yield 'atomic store with a lagging reader' => [static function (): Closure {
             $row = new \ArrayObject(['status' => 'off']);
-            $machine = new Machine(self::toggle(), new AtomicCallbackStore(
-                static fn(): string => 'off', // never catches up
-                static function (string $expected, string $new) use ($row): bool {
-                    $row['status'] = $new;
+            $machine = new Machine(
+                self::toggle(),
+                new AtomicCallbackStore(
+                    static fn(): string => 'off', // never catches up
+                    static function (string $expected, string $new) use ($row): bool {
+                        $row['status'] = $new;
 
-                    return true;
-                },
-            ));
+                        return true;
+                    },
+                ),
+            );
 
             return static function () use ($machine): void {
                 $machine->sendIfAllowed('FLIP');
@@ -200,10 +237,16 @@ final class MemoryTest extends TestCase
         }];
 
         yield 'send from fibers, including a rejected concurrent one' => [static function (): Closure {
-            $machine = new Machine(new Definition('off', ['off', 'on'], [
-                Transition::on('FLIP', 'off', 'on')->withBefore(static fn() => Fiber::suspend()),
-                Transition::on('FLIP', 'on', 'off'),
-            ]));
+            $machine = new Machine(
+                new Definition(
+                    'off',
+                    ['off', 'on'],
+                    [
+                        Transition::on('FLIP', 'off', 'on')->withBefore(static fn() => Fiber::suspend()),
+                        Transition::on('FLIP', 'on', 'off'),
+                    ],
+                ),
+            );
 
             return static function () use ($machine): void {
                 $fiber = new Fiber(static fn() => $machine->send('FLIP'));

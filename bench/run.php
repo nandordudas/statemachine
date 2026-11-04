@@ -19,28 +19,34 @@ use function Dudas\StateMachine\on;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$n = (int) ($argv[1] ?? 100_000);
+$n = (int) ($argv[1] ?? 50_000);
 
 /**
  * @param Closure(int): mixed $body
  */
-function bench(string $name, int $n, Closure $body): void
+function bench(string $name, int $n, Closure $body, int $rounds = 5): void
 {
     gc_collect_cycles();
     $body(0); // warm up
     gc_collect_cycles();
     $before = memory_get_usage();
-    $start = hrtime(true);
+    $best = INF;
 
-    for ($i = 0; $i < $n; $i++) {
-        $body($i);
+    // Best of several rounds: shared CI runners are noisy, the fastest round is the most stable figure.
+    for ($round = 0; $round < $rounds; $round++) {
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $n; $i++) {
+            $body($i);
+        }
+
+        $best = min($best, (hrtime(true) - $start) / 1e9);
     }
 
-    $seconds = (hrtime(true) - $start) / 1e9;
     gc_collect_cycles();
     $retained = memory_get_usage() - $before;
 
-    printf("%-44s %12s ops/s %10.2f µs/op %+10d B retained\n", $name, number_format($n / $seconds), $seconds / $n * 1e6, $retained);
+    printf("%-44s %12s ops/s %10.2f µs/op %+10d B retained\n", $name, number_format($n / $best), $best / $n * 1e6, $retained);
 }
 
 $toggle = Definition::fromTable('off', [['FLIP', 'off', 'on'], ['FLIP', 'on', 'off']]);
