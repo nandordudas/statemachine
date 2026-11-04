@@ -12,7 +12,10 @@ use Dudas\StateMachine\Contracts\TransactionalStateStore;
 use Dudas\StateMachine\Exception\AfterHookFailedException;
 use Dudas\StateMachine\Exception\ChainLimitExceededException;
 use Dudas\StateMachine\Exception\ConcurrentTransitionException;
+use Dudas\StateMachine\Exception\GuardRejectedException;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
+use Dudas\StateMachine\Exception\TransitionNotAllowedException;
+use Dudas\StateMachine\Exception\UnknownEventException;
 use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Store\InMemoryStore;
 use Dudas\StateMachine\Store\PropertyStore;
@@ -37,7 +40,10 @@ final class Machine implements StateMachine
 {
     private const string IDLE = 'idle';
 
-    /** Selecting the transition, `before`/`onExit` hooks, the store write. */
+    /** Evaluating the guards of the event being sent. */
+    private const string SELECTING = 'selecting';
+
+    /** `before`/`onExit` hooks and the store write. */
     private const string PREPARING = 'preparing';
 
     /** `onEnter`/`after` hooks, and events chained from them. */
@@ -56,12 +62,15 @@ final class Machine implements StateMachine
 
     private readonly StateStore $store;
 
+    /** Reused by every step: steps never overlap, and reuse saves an allocation per send. */
+    private readonly Attempt $attempt;
+
     private string $phase = self::IDLE;
 
     /** The caller (0 = main, else a fiber id) applying the current transition. */
     private int $owner = 0;
 
-    /** @var array<int, int> guard evaluations in progress, by caller */
+    /** @var array<int, int> guard evaluations by can()/availableEvents() in progress, by caller */
     private array $evaluating = [];
 
     /** @var list<array{string, array<string, mixed>, self::THROW|self::RESULT|self::QUIET}> events sent from hooks */
@@ -90,6 +99,7 @@ final class Machine implements StateMachine
         }
 
         $this->store = $store ?? new InMemoryStore($definition->initial);
+        $this->attempt = new Attempt();
 
         if ($this->store instanceof PropertyStore) {
             $this->store->assertCanHold($definition->states);
@@ -104,7 +114,13 @@ final class Machine implements StateMachine
     {
         $current = $this->state;
 
-        return array_any($states, static fn(string|BackedEnum $state): bool => Name::of($state) === $current);
+        foreach ($states as $state) {
+            if (Name::of($state) === $current) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function can(string|BackedEnum $event, array $payload = []): bool
@@ -115,11 +131,15 @@ final class Machine implements StateMachine
     public function availableEvents(array $payload = []): array
     {
         $from = $this->state;
+        $available = [];
 
-        return array_values(array_filter(
-            $this->definition->eventsFrom($from),
-            fn(string $event): bool => $this->select($event, $from, $payload) !== null,
-        ));
+        foreach ($this->definition->eventsFrom($from) as $event) {
+            if ($this->select($event, $from, $payload) !== null) {
+                $available[] = $event;
+            }
+        }
+
+        return $available;
     }
 
     public function send(string|BackedEnum $event, array $payload = []): static
@@ -137,7 +157,7 @@ final class Machine implements StateMachine
         foreach ($events as $item) {
             [$event, $payload] = self::item($item);
 
-            $this->send($event, $payload);
+            $this->dispatch(Name::of($event), $payload, self::THROW);
         }
 
         return $this;
@@ -205,16 +225,14 @@ final class Machine implements StateMachine
 
     public function sendIfAllowed(string|BackedEnum $event, array $payload = []): bool
     {
-        return $this->dispatch(Name::of($event), $payload, self::QUIET)?->ok() ?? false;
+        return $this->dispatch(Name::of($event), $payload, self::QUIET) !== false;
     }
 
     public function tryTransition(string|BackedEnum $event, array $payload = []): TransitionResult
     {
-        return (
-            $this->dispatch(Name::of($event), $payload, self::RESULT) ?? throw new LogicException(
-                'Only a quiet send reports a refusal as null.',
-            )
-        );
+        $result = $this->dispatch(Name::of($event), $payload, self::RESULT);
+
+        return $result instanceof TransitionResult ? $result : throw new LogicException('A result was requested.');
     }
 
     /**
@@ -223,51 +241,72 @@ final class Machine implements StateMachine
      *
      * @param array<string, mixed> $payload
      * @param self::THROW|self::RESULT|self::QUIET $mode how to report a refusal
-     * @return TransitionResult|null null for a refusal in quiet mode
+     * @return TransitionResult|bool a TransitionResult in result mode; otherwise whether the event was applied
+     *                               (or queued)
      */
-    private function dispatch(string $event, array $payload, int $mode): ?TransitionResult
+    private function dispatch(string $event, array $payload, int $mode): TransitionResult|bool
     {
         $caller = self::caller();
 
-        if (isset($this->evaluating[$caller])) {
-            throw ConcurrentTransitionException::sendFromGuard($event);
-        }
-
-        if ($this->phase !== self::IDLE) {
-            if ($caller !== $this->owner) {
-                throw ConcurrentTransitionException::busy($event);
+        // Only the rare re-entrant case pays for these checks.
+        if ($this->phase !== self::IDLE || $this->evaluating !== []) {
+            if (isset($this->evaluating[$caller]) || $this->phase === self::SELECTING && $caller === $this->owner) {
+                throw ConcurrentTransitionException::sendFromGuard($event);
             }
 
-            if ($this->phase === self::PREPARING) {
-                throw ConcurrentTransitionException::nestedSend($event);
+            if ($this->phase !== self::IDLE) {
+                if ($caller !== $this->owner) {
+                    throw ConcurrentTransitionException::busy($event);
+                }
+
+                if ($this->phase === self::PREPARING) {
+                    throw ConcurrentTransitionException::nestedSend($event);
+                }
+
+                $this->queue[] = [$event, $payload, $mode];
+
+                return $mode === self::RESULT ? TransitionResult::queued($this->state) : true;
             }
-
-            $this->queue[] = [$event, $payload, $mode];
-
-            return TransitionResult::queued($this->state);
         }
 
         $this->owner = $caller;
 
         try {
-            $result = self::report($this->step($event, $payload), $mode);
+            $outcome = $this->step($event, $payload);
 
-            // A moving index instead of array_shift(): draining n chained events stays O(n).
-            for ($next = 0; isset($this->queue[$next]); $next++) {
-                [$chained, $chainedPayload, $chainedMode] = $this->queue[$next];
-
-                if ($next >= $this->maxChainedEvents) {
-                    throw ChainLimitExceededException::after($this->maxChainedEvents, $chained);
-                }
-
-                self::report($this->step($chained, $chainedPayload), $chainedMode);
+            if ($this->queue !== []) {
+                $this->drain();
             }
 
-            return $result;
+            if ($outcome instanceof Refusal) {
+                return self::refuse($outcome, $mode);
+            }
+
+            return $mode === self::RESULT ? TransitionResult::succeeded($outcome->to, $outcome) : true;
         } finally {
             $this->phase = self::IDLE;
             $this->owner = 0;
             $this->queue = [];
+        }
+    }
+
+    /**
+     * Applies the events hooks queued, in order. A moving index instead of array_shift() keeps it O(n).
+     */
+    private function drain(): void
+    {
+        for ($next = 0; isset($this->queue[$next]); $next++) {
+            [$event, $payload, $mode] = $this->queue[$next];
+
+            if ($next >= $this->maxChainedEvents) {
+                throw ChainLimitExceededException::after($this->maxChainedEvents, $event);
+            }
+
+            $outcome = $this->step($event, $payload);
+
+            if ($outcome instanceof Refusal) {
+                self::refuse($outcome, $mode); // throws for a queued send(); otherwise the refusal is dropped
+            }
         }
     }
 
@@ -277,15 +316,16 @@ final class Machine implements StateMachine
      *
      * @param array<string, mixed> $payload
      */
-    private function step(string $event, array $payload): TransitionResult|Refusal
+    private function step(string $event, array $payload): TransitionContext|Refusal
     {
-        $this->phase = self::PREPARING;
-        $attempt = new Attempt();
+        $attempt = $this->attempt;
+        $attempt->transition = null;
+        $attempt->context = null;
 
         try {
             $refusal = $this->store instanceof TransactionalStateStore
-                ? $this->store->transaction(fn(): ?Refusal => $this->prepare($event, $payload, $attempt))
-                : $this->prepare($event, $payload, $attempt);
+                ? $this->store->transaction(fn(): ?Refusal => $this->prepare($event, $payload))
+                : $this->prepare($event, $payload);
         } catch (Throwable $e) {
             if ($attempt->transition !== null && $attempt->context !== null) {
                 foreach ($attempt->transition->abort as $hook) {
@@ -308,14 +348,25 @@ final class Machine implements StateMachine
         }
 
         $this->phase = self::FINISHING;
-        $this->record($context);
+
+        if ($this->recordHistory !== false) {
+            $this->record($context);
+        }
 
         $failures = [];
 
-        foreach ([...$this->definition->enterHooksFor($context->to), ...$transition->after] as $hook) {
+        foreach ($this->definition->enterHooksFor($context->to) as $hook) {
             try {
                 $hook->handle($context);
             } catch (Exception $e) { // Errors are bugs, not hook failures: let them propagate
+                $failures[] = $e;
+            }
+        }
+
+        foreach ($transition->after as $hook) {
+            try {
+                $hook->handle($context);
+            } catch (Exception $e) {
                 $failures[] = $e;
             }
         }
@@ -326,104 +377,95 @@ final class Machine implements StateMachine
             throw new AfterHookFailedException($context, $failures[0], $failures);
         }
 
-        return TransitionResult::succeeded($context->to, $context);
+        return $context;
     }
 
     /**
      * Selects the transition, runs `before`/`onExit` hooks and writes the new state, recording progress
-     * in `$attempt`.
+     * in the attempt so a failure can be compensated.
      *
      * @param array<string, mixed> $payload
      * @return Refusal|null why the event was refused, or null once the new state is written
      */
-    private function prepare(string $event, array $payload, Attempt $attempt): ?Refusal
+    private function prepare(string $event, array $payload): ?Refusal
     {
+        $this->phase = self::SELECTING;
         $from = $this->store->get();
 
         if (!$this->definition->hasState($from)) {
             throw UnknownStateException::named($from);
         }
 
-        $transition = $this->plan($event, $from, $payload);
-
-        if (!$transition instanceof Transition) {
-            return $transition;
+        if (!$this->definition->hasEvent($event)) {
+            return new Refusal($event, $from, Refusal::UNKNOWN_EVENT);
         }
 
-        $context = $transition->contextFor($from, $payload);
-        $attempt->transition = $transition;
-        $attempt->context = $context;
+        $transition = $this->firstPermitted($event, $from, $payload);
 
-        foreach ([...$transition->before, ...$this->definition->exitHooksFor($from)] as $hook) {
+        if ($transition === null) {
+            return new Refusal(
+                $event,
+                $from,
+                $this->definition->transitionsFrom($from, $event) === []
+                    ? Refusal::NOT_ALLOWED
+                    : Refusal::GUARD_REJECTED,
+            );
+        }
+
+        $this->phase = self::PREPARING;
+        $context = $transition->contextFor($from, $payload);
+        $this->attempt->transition = $transition;
+        $this->attempt->context = $context;
+
+        foreach ($transition->before as $hook) {
             $hook->handle($context);
         }
 
-        // Another writer may have changed the state meanwhile; don't overwrite it with a stale transition.
+        foreach ($this->definition->exitHooksFor($from) as $hook) {
+            $hook->handle($context);
+        }
+
+        // A hook, or another writer while a guard or hook was suspended, may have changed the state:
+        // don't apply a stale transition.
         $now = $this->store->get();
 
         if ($now !== $from) {
             throw ConcurrentTransitionException::forEvent($event, $from, $now);
         }
 
-        $this->write($event, $from, $transition->to);
+        if ($this->store instanceof AtomicStateStore) {
+            if (!$this->store->compareAndSet($from, $transition->to)) {
+                throw ConcurrentTransitionException::forEvent($event, $from, $this->store->get());
+            }
+        } else {
+            $this->store->set($transition->to);
+        }
 
         return null;
     }
 
     /**
-     * @param array<string, mixed> $payload
-     */
-    private function plan(string $event, string $from, array $payload): Transition|Refusal
-    {
-        if (!$this->definition->hasEvent($event)) {
-            return new Refusal($event, $from, Refusal::UNKNOWN_EVENT);
-        }
-
-        $transition = $this->select($event, $from, $payload);
-
-        if ($transition !== null) {
-            return $transition;
-        }
-
-        return new Refusal(
-            $event,
-            $from,
-            $this->definition->transitionsFrom($from, $event) === [] ? Refusal::NOT_ALLOWED : Refusal::GUARD_REJECTED,
-        );
-    }
-
-    /**
      * @param self::THROW|self::RESULT|self::QUIET $mode
      */
-    private static function report(TransitionResult|Refusal $outcome, int $mode): ?TransitionResult
+    private static function refuse(Refusal $refusal, int $mode): TransitionResult|false
     {
-        if ($outcome instanceof TransitionResult) {
-            return $outcome;
+        if ($mode === self::QUIET) {
+            return false;
         }
 
-        return match ($mode) {
-            self::THROW => throw $outcome->exception(),
-            self::RESULT => TransitionResult::refused($outcome->from, $outcome->exception()),
-            self::QUIET => null,
+        // Built here, only when someone gets to see it.
+        $exception = match ($refusal->reason) {
+            Refusal::UNKNOWN_EVENT => UnknownEventException::named($refusal->event),
+            Refusal::GUARD_REJECTED => GuardRejectedException::forEvent($refusal->event, $refusal->from),
+            Refusal::NOT_ALLOWED => TransitionNotAllowedException::fromState($refusal->event, $refusal->from),
         };
-    }
 
-    private function write(string $event, string $from, string $to): void
-    {
-        if ($this->store instanceof AtomicStateStore) {
-            if (!$this->store->compareAndSet($from, $to)) {
-                throw ConcurrentTransitionException::forEvent($event, $from, $this->store->get());
-            }
-
-            return;
-        }
-
-        $this->store->set($to);
+        return $mode === self::RESULT ? TransitionResult::refused($refusal->from, $exception) : throw $exception;
     }
 
     private function record(TransitionContext $context): void
     {
-        if ($this->recordHistory === false || $this->recordHistory === 0) {
+        if ($this->recordHistory === 0) {
             return;
         }
 
@@ -439,6 +481,8 @@ final class Machine implements StateMachine
     }
 
     /**
+     * The first transition whose guards allow it. Used outside send(), so a guard that sends is detected.
+     *
      * @param array<string, mixed> $payload
      */
     private function select(string $event, string $from, array $payload): ?Transition
@@ -447,15 +491,26 @@ final class Machine implements StateMachine
         $this->evaluating[$caller] = ($this->evaluating[$caller] ?? 0) + 1;
 
         try {
-            return array_find(
-                $this->definition->transitionsFrom($from, $event),
-                static fn(Transition $t): bool => $t->permits($from, $payload),
-            );
+            return $this->firstPermitted($event, $from, $payload);
         } finally {
             if (--$this->evaluating[$caller] === 0) {
                 unset($this->evaluating[$caller]);
             }
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function firstPermitted(string $event, string $from, array $payload): ?Transition
+    {
+        foreach ($this->definition->transitionsFrom($from, $event) as $transition) {
+            if ($transition->permits($from, $payload)) {
+                return $transition;
+            }
+        }
+
+        return null;
     }
 
     /**
