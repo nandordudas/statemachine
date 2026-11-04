@@ -73,25 +73,28 @@ final class GeneratorTest extends TestCase
         self::assertSame('review', $machine->state);
     }
 
+    /**
+     * @return Generator<int, string|array{string, array<string, mixed>}, TransitionResult, string>
+     */
+    private static function approval(): Generator
+    {
+        yield 'SUBMIT';
+        $approved = yield 'APPROVE';
+
+        if ($approved->failure instanceof GuardRejectedException) {
+            yield ['APPROVE', ['ok' => true]];
+
+            return 'approved on second try';
+        }
+
+        return 'approved at once';
+    }
+
     public function testDriveFeedsEachResultBackIntoTheProcess(): void
     {
         $machine = $this->machine();
 
-        /** @var Generator<int, string|array{string, array<string, mixed>}, TransitionResult, string> $process */
-        $process = (static function (): Generator {
-            yield 'SUBMIT';
-            $approved = yield 'APPROVE';
-
-            if ($approved instanceof TransitionResult && $approved->failure instanceof GuardRejectedException) {
-                yield ['APPROVE', ['ok' => true]];
-
-                return 'approved on second try';
-            }
-
-            return 'approved at once';
-        })();
-
-        $outcome = $machine->drive($process);
+        $outcome = $machine->drive(self::approval());
 
         self::assertSame('approved on second try', $outcome);
         self::assertSame('published', $machine->state);
