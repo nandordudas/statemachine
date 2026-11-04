@@ -5,6 +5,9 @@ description: Model a workflow, status lifecycle or approval flow with the nandor
 
 # Modelling workflows with state-machine (PHP 7.2 port)
 
+Install: `composer require nandordudas/state-machine-php72` (PHP 7.2 to 8.4). On PHP 8.5+ use
+`nandordudas/state-machine` instead; never both.
+
 ## 1. Model first
 
 List **states** (nouns: `draft`, `review`), **events** (verbs: `SUBMIT`, `APPROVE`), and for each event its allowed
