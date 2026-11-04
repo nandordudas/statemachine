@@ -200,7 +200,7 @@ final class MachineTest extends VideoTestCase
         new Machine($this->video(), new InMemoryStore('ghost'));
     }
 
-    public function testNestedSendFromBeforeHookDoesNotOverwriteState(): void
+    public function testNestedSendFromBeforeHookIsRejected(): void
     {
         $machine = null;
         $definition = $this->video(extra: [
@@ -214,11 +214,11 @@ final class MachineTest extends VideoTestCase
 
         try {
             $machine->send('GO');
-            self::fail('Expected the stale transition to be rejected.');
+            self::fail('Expected the nested send to be rejected.');
         } catch (ConcurrentTransitionException) {
         }
 
-        self::assertSame('paused', $machine->state);
+        self::assertSame('stopped', $machine->state);
     }
 
     public function testAfterHookFailureDoesNotRollBackState(): void
@@ -341,6 +341,53 @@ final class MachineTest extends VideoTestCase
         } finally {
             self::assertSame('paused', $status);
         }
+    }
+
+    public function testEnterHooksMayChainAnotherEvent(): void
+    {
+        $holder = new \stdClass();
+        $definition = Definition::builder()
+            ->initial('a')
+            ->states('a', 'b', 'c')
+            ->onEnter('b', static function () use ($holder): void {
+                $holder->machine->send('NEXT');
+            })
+            ->transition(Transition::on('GO', 'a', 'b'), Transition::on('NEXT', 'b', 'c'))
+            ->build();
+        $holder->machine = new Machine($definition);
+
+        self::assertSame('c', $holder->machine->send('GO')->state);
+    }
+
+    public function testErrorsInAfterHooksAreNotWrapped(): void
+    {
+        $definition = Definition::builder()
+            ->initial('a')
+            ->states('a', 'b')
+            ->transition(Transition::on('GO', 'a', 'b')->withAfter(static fn() => throw new \Error('bug')))
+            ->build();
+
+        $this->expectException(\Error::class);
+
+        new Machine($definition)->send('GO');
+    }
+
+    public function testStateChangedToUndeclaredValueIsReportedOnSend(): void
+    {
+        $status = 'stopped';
+        $machine = new Machine(
+            $this->video(),
+            new CallbackStore(static function () use (&$status): string {
+                return $status;
+            }, static function (string $s) use (&$status): void {
+                $status = $s;
+            }),
+        );
+        $status = 'ghost';
+
+        $this->expectException(UnknownStateException::class);
+
+        $machine->send('PLAY');
     }
 
     public function testStoreWithoutStateIsRejected(): void

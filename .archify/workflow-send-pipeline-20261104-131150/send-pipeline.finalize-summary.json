@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/nandordudas/Development/code/statemachine/.archify/workflow-send-pipeline-20261104-131150/candidate.json",
+    "sha256": "3b70ec1df5040a6df774da9c9380d7c29d4f2ee10a53160a9b41e82b17aa3440",
+    "bytes": 4657
+  },
+  "artifact": {
+    "path": "/Users/nandordudas/Development/code/statemachine/.archify/workflow-send-pipeline-20261104-131150/send-pipeline.html",
+    "sha256": "fd85c6ee5c9b7e5b8c2af34fd38c2b844556f1b840e2238690d955720ba91ad1",
+    "bytes": 832492
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/nandordudas/Development/code/statemachine/.archify/workflow-send-pipeline-20261104-131150/send-pipeline.finalize.json",
+    "summaryReceipt": "/Users/nandordudas/Development/code/statemachine/.archify/workflow-send-pipeline-20261104-131150/send-pipeline.finalize-summary.json",
+    "browserCheckReceipt": "/Users/nandordudas/Development/code/statemachine/.archify/workflow-send-pipeline-20261104-131150/send-pipeline.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-04T12:11:50.861Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 5790,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

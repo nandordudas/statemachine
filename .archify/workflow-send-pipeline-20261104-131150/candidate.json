@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "State machine: Machine::send() pipeline",
+    "quality_profile": "showcase",
+    "output": ".archify/workflow-send-pipeline-20261104-131150/send-pipeline.html"
+  },
+  "lanes": [
+    { "id": "caller", "label": "Caller" },
+    { "id": "errors", "label": "Failures (exceptions)", "variant": "exception" },
+    { "id": "machine", "label": "Machine::send()" },
+    { "id": "data", "label": "Definition & StateStore" }
+  ],
+  "phases": [
+    { "id": "decide", "label": "Decide", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
+    { "id": "apply", "label": "Apply", "fromCol": 3, "toCol": 4, "variant": "security" },
+    { "id": "notify", "label": "Notify", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["call", "resolve", "select", "pre", "write", "post", "done"],
+  "nodes": [
+    { "id": "call", "lane": "caller", "col": 0, "type": "external", "label": "send(event, payload)", "sublabel": "string or enum", "width": 150 },
+    { "id": "done", "lane": "caller", "col": 5, "type": "frontend", "label": "Returns $this", "sublabel": "new state", "width": 132 },
+
+    { "id": "unknown", "lane": "errors", "col": 1, "type": "security", "label": "UnknownEvent", "sublabel": "UnknownState", "width": 132 },
+    { "id": "notallowed", "lane": "errors", "col": 2, "type": "security", "label": "NotAllowed", "sublabel": "or GuardRejected", "width": 132 },
+    { "id": "concurrent", "lane": "errors", "col": 3, "type": "security", "label": "ConcurrentTransition", "sublabel": "nothing written", "width": 150 },
+    { "id": "afterfail", "lane": "errors", "col": 4, "type": "security", "label": "AfterHookFailed", "sublabel": "state kept", "width": 132 },
+
+    { "id": "resolve", "lane": "machine", "col": 1, "type": "backend", "label": "Resolve", "sublabel": "known event + state", "width": 132 },
+    { "id": "select", "lane": "machine", "col": 2, "type": "backend", "label": "Select", "sublabel": "first permitted wins", "tag": "guards", "width": 132 },
+    { "id": "pre", "lane": "machine", "col": 3, "type": "backend", "label": "before + onExit", "sublabel": "throw aborts", "tag": "no nested send", "width": 140 },
+    { "id": "write", "lane": "machine", "col": 4, "type": "messagebus", "label": "Write state", "sublabel": "compareAndSet", "width": 132 },
+    { "id": "post", "lane": "machine", "col": 5, "type": "backend", "label": "onEnter + after", "sublabel": "may chain send()", "width": 132 },
+
+    { "id": "definition", "lane": "data", "col": 2, "type": "database", "label": "Definition", "sublabel": "immutable blueprint", "width": 132 },
+    { "id": "store", "lane": "data", "col": 4, "type": "database", "label": "StateStore", "sublabel": "memory / entity / row", "width": 132 }
+  ],
+  "edges": [
+    { "id": "e-call", "from": "call", "to": "resolve", "variant": "emphasis" },
+    { "id": "e-resolve", "from": "resolve", "to": "select", "label": "known", "variant": "emphasis" },
+    { "id": "e-select", "from": "select", "to": "pre", "label": "guards pass", "variant": "emphasis" },
+    { "id": "e-pre", "from": "pre", "to": "write", "label": "state unchanged", "variant": "emphasis" },
+    { "id": "e-write", "from": "write", "to": "post", "label": "stored", "variant": "emphasis" },
+    { "id": "e-post", "from": "post", "to": "done", "variant": "emphasis" },
+
+    { "id": "x-unknown", "from": "resolve", "to": "unknown", "label": "unknown", "variant": "security", "role": "error" },
+    { "id": "x-notallowed", "from": "select", "to": "notallowed", "label": "none permits", "variant": "security", "role": "error" },
+    { "id": "x-concurrent", "from": "pre", "to": "concurrent", "label": "nested/changed", "variant": "security", "role": "error" },
+    { "id": "x-cas", "from": "write", "to": "concurrent", "label": "CAS lost", "variant": "security", "role": "error" },
+    { "id": "x-after", "from": "post", "to": "afterfail", "label": "hook threw", "variant": "security", "role": "error" },
+
+    { "id": "d-def", "from": "definition", "to": "select", "label": "transitions", "variant": "dashed" },
+    { "id": "d-store", "from": "write", "to": "store", "label": "set / CAS", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Guarantees",
+      "items": [
+        "Guards, before and onExit failures leave the state untouched",
+        "onEnter/after failures never roll the state back"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Concurrency",
+      "items": [
+        "Nested send() inside before/onExit is rejected",
+        "AtomicStateStore refuses a write that lost the race"
+      ]
+    }
+  ]
+}

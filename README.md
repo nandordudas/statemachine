@@ -35,6 +35,12 @@ $video->can('PLAY');       // false
 - Exceptions all implement `StateMachineException`; an invalid event/state (`TransitionNotAllowedException`)
   is distinct from a guard veto (`GuardRejectedException`, a subclass).
 
+## Examples
+
+- `examples/OrderStatus`: a 31-status matrix checked against legacy rules.
+- `examples/Payment`: conditional branching on a gateway answer, an amount guard, an enter hook, an atomic store.
+- `examples/Document`: approval workflow over an entity via `CallbackStore`, role guards, enter/exit hooks.
+
 ## Semantics
 
 `send()` runs: select transition (guards) → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
@@ -50,6 +56,7 @@ $video->can('PLAY');       // false
 | `onEnter`/`after` hook throws | state is already changed and is **not** rolled back; wrapped in `AfterHookFailedException` (original in `getPrevious()`, context in `->context`) |
 | Store holds an unknown or missing state | `UnknownStateException` |
 
+Hooks must not call `send()` from `before`/`onExit` (`ConcurrentTransitionException`); chaining from `onEnter`/`after` is fine.
 Stores shared between writers should implement `AtomicStateStore` (`compareAndSet($expected, $new)`;
 `InMemoryStore` and `AtomicCallbackStore` do). The machine then refuses a write that lost the race
 with `ConcurrentTransitionException`; plain stores only get the check made before the write.

@@ -59,19 +59,9 @@ final readonly class Transition
         }
 
         $this->from = $sources;
-        $this->guards = array_map(static fn(Guard|callable $g): Guard => self::wrapGuard($g), array_values($guards));
-        $this->before = array_map(static fn(Hook|callable $h): Hook => self::wrapHook($h), array_values($before));
-        $this->after = array_map(static fn(Hook|callable $h): Hook => self::wrapHook($h), array_values($after));
-    }
-
-    private static function wrapGuard(Guard|callable $guard): Guard
-    {
-        return $guard instanceof Guard ? $guard : new ClosureGuard($guard(...));
-    }
-
-    private static function wrapHook(Hook|callable $hook): Hook
-    {
-        return $hook instanceof Hook ? $hook : new ClosureHook($hook(...));
+        $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
+        $this->before = array_map(ClosureHook::wrap(...), array_values($before));
+        $this->after = array_map(ClosureHook::wrap(...), array_values($after));
     }
 
     /**
@@ -88,7 +78,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withGuard(Guard|callable $guard): self
     {
-        return clone($this, ['guards' => [...$this->guards, self::wrapGuard($guard)]]);
+        return clone($this, ['guards' => [...$this->guards, ClosureGuard::wrap($guard)]]);
     }
 
     /**
@@ -97,7 +87,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withBefore(Hook|callable $hook): self
     {
-        return clone($this, ['before' => [...$this->before, self::wrapHook($hook)]]);
+        return clone($this, ['before' => [...$this->before, ClosureHook::wrap($hook)]]);
     }
 
     /**
@@ -106,7 +96,7 @@ final readonly class Transition
     #[\NoDiscard]
     public function withAfter(Hook|callable $hook): self
     {
-        return clone($this, ['after' => [...$this->after, self::wrapHook($hook)]]);
+        return clone($this, ['after' => [...$this->after, ClosureHook::wrap($hook)]]);
     }
 
     public function leavesFrom(string $state): bool
