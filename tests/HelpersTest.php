@@ -5,58 +5,121 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Tests;
 
 use Dudas\StateMachine\Definition;
-use Dudas\StateMachine\Machine;
-use Dudas\StateMachine\Tests\Fixtures\VideoEvent as E;
-use Dudas\StateMachine\Tests\Fixtures\VideoState as S;
+use Dudas\StateMachine\Exception\InvalidDefinitionException;
+use Dudas\StateMachine\Exception\UnknownStateException;
+use Dudas\StateMachine\Store\PropertyStore;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
+use function Dudas\StateMachine\allOf;
+use function Dudas\StateMachine\anyOf;
 use function Dudas\StateMachine\machine;
+use function Dudas\StateMachine\machineFor;
+use function Dudas\StateMachine\not;
 use function Dudas\StateMachine\on;
+use function Dudas\StateMachine\payloadIs;
+use function Dudas\StateMachine\payloadsEqual;
 
 final class HelpersTest extends TestCase
 {
-    public function testMachineHelperBuildsARunnableMachine(): void
+    private function context(array $payload): TransitionContext
+    {
+        return new TransitionContext('GO', 'a', 'b', $payload);
+    }
+
+    public function testMachineAndOnHelpers(): void
     {
         $log = [];
         $video = machine(
-            initial: S::Stopped,
-            states: S::class,
-            transitions: [
-                on(E::Play, from: S::Stopped, to: S::Playing, after: static function (TransitionContext $c) use (&$log): void {
-                    $log[] = "after:{$c->event}";
+            'stopped',
+            ['playing', 'stopped'],
+            [
+                on('PLAY', 'stopped', 'playing', [], [], static function (TransitionContext $c) use (&$log): void {
+                    $log[] = 'after:' . $c->event;
                 }),
-                on(E::Stop, S::Playing, S::Stopped, guard: static fn(TransitionContext $c): bool => ($c->payload['allowed'] ?? false) === true),
+                on('STOP', 'playing', 'stopped', static function (TransitionContext $c): bool {
+                    return ($c->payload['allowed'] ?? false) === true;
+                }),
             ],
-            onEnter: [S::Playing->value => static function () use (&$log): void {
-                $log[] = 'enter:playing';
+            ['playing' => static function () use (&$log): void {
+                $log[] = 'enter';
             }],
         );
 
-        $video->send(E::Play);
+        $video->send('PLAY');
 
-        self::assertSame(['enter:playing', 'after:PLAY'], $log);
-        self::assertFalse($video->can(E::Stop));
-        self::assertTrue($video->can(E::Stop, ['allowed' => true]));
+        self::assertSame(['enter', 'after:PLAY'], $log);
+        self::assertFalse($video->can('STOP'));
+        self::assertTrue($video->can('STOP', ['allowed' => true]));
     }
 
-    public function testOnAcceptsListsOfGuardsAndHooks(): void
+    public function testGuardCombinators(): void
     {
-        $transition = on('GO', 'a', 'b', guard: [static fn(): bool => true, static fn(): bool => false]);
+        $reviewer = allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')));
+
+        self::assertTrue($reviewer->allows($this->context([
+            'role' => 'approver',
+            'actor' => 'bob',
+            'author' => 'ann',
+        ])));
+        self::assertFalse($reviewer->allows($this->context([
+            'role' => 'approver',
+            'actor' => 'ann',
+            'author' => 'ann',
+        ])));
+        self::assertFalse($reviewer->allows($this->context(['role' => 'editor', 'actor' => 'bob', 'author' => 'ann'])));
+
+        $either = anyOf(payloadIs('admin', true), static function (TransitionContext $c): bool {
+            return ($c->payload['n'] ?? 0) > 1;
+        });
+        self::assertTrue($either->allows($this->context(['admin' => true])));
+        self::assertTrue($either->allows($this->context(['n' => 2])));
+        self::assertFalse($either->allows($this->context([])));
+    }
+
+    public function testOnAcceptsListsOfGuards(): void
+    {
+        $transition = on('GO', 'a', 'b', [
+            static function (): bool {
+                return true;
+            },
+            static function (): bool {
+                return false;
+            },
+        ]);
 
         self::assertFalse($transition->permits('a'));
         self::assertCount(2, $transition->guards);
     }
 
-    public function testFromTableInfersStates(): void
+    public function testMachineForBindsAPropertyAndPropertyStoreValidates(): void
     {
-        $definition = Definition::fromTable('draft', [
-            ['SUBMIT', 'draft', 'review'],
-            ['APPROVE', 'review', 'published'],
-            ['ARCHIVE', ['review', 'published'], 'archived'],
-        ]);
+        $entity = new class {
+            /** @var string|null */
+            private $status = 'stopped';
 
-        self::assertSame(['draft', 'review', 'published', 'archived'], $definition->states);
-        self::assertSame('published', new Machine($definition)->send('SUBMIT')->send('APPROVE')->state);
+            public function status(): ?string
+            {
+                return $this->status;
+            }
+        };
+        $flow = machineFor(Definition::fromTable('stopped', [['PLAY', 'stopped', 'playing']]), $entity);
+
+        $flow->send('PLAY');
+        self::assertSame('playing', $entity->status());
+
+        try {
+            new PropertyStore(new \stdClass(), 'nope');
+            self::fail('Expected an exception.');
+        } catch (InvalidDefinitionException $e) {
+            self::assertStringContainsString('nope', $e->getMessage());
+        }
+
+        $empty = new class {
+            /** @var string|null */
+            public $status;
+        };
+        $this->expectException(UnknownStateException::class);
+        (new PropertyStore($empty))->get();
     }
 }

@@ -6,7 +6,6 @@ namespace Dudas\StateMachine\Tests;
 
 use Dudas\StateMachine\Definition;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
-use Dudas\StateMachine\Tests\Fixtures\VideoState;
 use Dudas\StateMachine\Transition;
 
 final class DefinitionTest extends VideoTestCase
@@ -22,14 +21,6 @@ final class DefinitionTest extends VideoTestCase
         self::assertFalse($definition->hasEvent('NOPE'));
         self::assertTrue($definition->hasState('paused'));
         self::assertCount(1, $definition->transitionsFor('STOP'));
-    }
-
-    public function testAcceptsEnums(): void
-    {
-        $definition = new Definition(VideoState::Stopped, VideoState::cases(), []);
-
-        self::assertSame('stopped', $definition->initial);
-        self::assertSame(['playing', 'stopped', 'paused'], $definition->states);
     }
 
     public function testInitialStateMustBeDeclared(): void
@@ -54,24 +45,71 @@ final class DefinitionTest extends VideoTestCase
         Definition::builder()->states('a')->build();
     }
 
-    public function testNeedsAtLeastOneState(): void
+    public function testNeedsAtLeastOneStateAndNoEmptyNames(): void
     {
+        try {
+            new Definition('a', [], []);
+            self::fail('Expected an exception.');
+        } catch (InvalidDefinitionException $e) {
+            self::assertStringContainsString('at least one state', $e->getMessage());
+        }
+
         $this->expectException(InvalidDefinitionException::class);
-
-        new Definition('a', [], []);
-    }
-
-    public function testRejectsEmptyStateName(): void
-    {
-        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
-
         new Definition('', [''], []);
     }
 
-    public function testRejectsNonTransitionElements(): void
+    public function testRejectsNonTransitionElementsAndNonStringNames(): void
     {
-        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
+        try {
+            new Definition('a', ['a'], ['oops']);
+            self::fail('Expected an exception.');
+        } catch (InvalidDefinitionException $e) {
+            self::assertStringContainsString('instances of', $e->getMessage());
+        }
 
-        new Definition('a', ['a'], ['oops']);
+        $this->expectException(InvalidDefinitionException::class);
+        new Definition('a', ['a', 1], []);
+    }
+
+    public function testStateHooksMustReferToDeclaredStates(): void
+    {
+        $this->expectException(InvalidDefinitionException::class);
+
+        Definition::builder()
+            ->initial('a')
+            ->states('a')
+            ->onEnter('ghost', static function () {})
+            ->build();
+    }
+
+    public function testFromTableInfersStatesAndUnreachableStatesAreReported(): void
+    {
+        $definition = Definition::fromTable('draft', [
+            ['SUBMIT', 'draft', 'review'],
+            ['ARCHIVE', ['review', 'published'], 'archived'],
+        ]);
+
+        self::assertSame(['draft', 'review', 'published', 'archived'], $definition->states);
+        self::assertSame(['published'], $definition->unreachableStates());
+    }
+
+    public function testMermaidAndDotExport(): void
+    {
+        $definition = Definition::builder()
+            ->initial('draft')
+            ->states('draft', 'in review')
+            ->transition(
+                Transition::on('SUBMIT', 'draft', 'in review'),
+                Transition::on('REJECT', 'in review', 'draft')->withGuard(static function (): bool {
+                    return true;
+                }),
+            )
+            ->build();
+
+        $mermaid = $definition->toMermaid();
+        self::assertStringContainsString('state "in review" as in_review', $mermaid);
+        self::assertStringContainsString('draft --> in_review : SUBMIT', $mermaid);
+        self::assertStringContainsString('in_review --> draft : REJECT [guard]', $mermaid);
+        self::assertStringContainsString('"draft" [shape=doublecircle];', $definition->toDot());
     }
 }
