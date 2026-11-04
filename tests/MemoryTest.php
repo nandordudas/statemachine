@@ -286,10 +286,16 @@ final class MemoryTest extends TestCase
 
     public function testAMachineDoesNotKeepThePayloadOfPastTransitionsAlive(): void
     {
-        $machine = new Machine(new Definition('off', ['off', 'on'], [
-            Transition::on('FLIP', 'off', 'on')->withAfter(static fn() => null),
-            Transition::on('FLIP', 'on', 'off'),
-        ]));
+        $machine = new Machine(
+            new Definition(
+                'off',
+                ['off', 'on'],
+                [
+                    Transition::on('FLIP', 'off', 'on')->withAfter(static fn() => null),
+                    Transition::on('FLIP', 'on', 'off'),
+                ],
+            ),
+        );
         $payload = new \stdClass();
         $probe = \WeakReference::create($payload);
 
