@@ -8,6 +8,32 @@ Differences from the PHP 8.5 version: states and events are plain **strings** (n
 `$machine->state()` (also readable as `$machine->state`), there are no named arguments, and value-object properties
 are `@readonly` by convention instead of enforced.
 
+## Installation
+
+| Your PHP | Package |
+|---|---|
+| 7.2 to 8.4 | `nandordudas/state-machine-php72` (this package) |
+| 8.5+ | [`nandordudas/state-machine`](https://github.com/nandordudas/statemachine) (enums, named arguments) |
+
+```bash
+composer require nandordudas/state-machine-php72
+```
+
+Both packages use the `Dudas\StateMachine` namespace, so install only one; this package declares a `conflict` with
+the other. Until it is on Packagist, require it from the repository:
+
+```json
+{
+  "repositories": [{ "type": "vcs", "url": "https://github.com/nandordudas/state-machine-php72" }],
+  "require": { "nandordudas/state-machine-php72": "dev-main" }
+}
+```
+
+(or a `path` repository to a local checkout). For a private repository give Composer a read-only token:
+`composer config --global github-oauth.github.com <token>`.
+
+## Quick start
+
 ```php
 use Dudas\StateMachine\{Definition, Machine, Transition, TransitionContext};
 
@@ -52,6 +78,29 @@ $definition->unreachableStates();                      // lint: states nothing c
 `Definition::fromTable('draft', [['SUBMIT', 'draft', 'review'], ...])` builds a guard-less definition from rows.
 Machine history is opt-in: `new Machine($definition, $store, true)` then `->history()`.
 
+## Common patterns
+
+```php
+// State stored on your own object (a string property, public or not)
+$flow = machineFor($definition, $order, 'status');
+
+// Try without exceptions
+$result = $flow->tryTransition('SHIP', $payload);   // ->ok(), ->failure, ->state
+
+// Catch everything the library can throw
+try {
+    $flow->send('SHIP');
+} catch (\Dudas\StateMachine\Exception\StateMachineException $e) {
+    // handle
+}
+
+file_put_contents('flow.mmd', $definition->toMermaid());   // draw it
+```
+
+Guards (`withGuard`, `allOf`, ...) decide whether an event is allowed and must be side-effect free. Hooks
+(`before`, `onExit`, `onEnter`, `after`) do the work. Use class constants for state and event names to get
+some of the type safety enums would give.
+
 ## Semantics
 
 `send()` runs: select transition (guards) → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
@@ -68,6 +117,11 @@ Machine history is opt-in: `new Machine($definition, $store, true)` then `->hist
 
 Stores shared between writers should implement `AtomicStateStore` (`compareAndSet`); `InMemoryStore` and
 `AtomicCallbackStore` do. Guards may run twice (`can()` then `send()`), so keep them side-effect free.
+
+## Contributing
+
+Code must stay valid PHP 7.2 (see `AGENTS.md`). Features land in the PHP 8.5 package first and are hand-ported here;
+keep the two in step and tag them with the same version.
 
 ## Develop
 
