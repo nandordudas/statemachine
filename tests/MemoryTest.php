@@ -283,4 +283,20 @@ final class MemoryTest extends TestCase
 
         self::assertNull($probe->get(), 'a machine holds no reference cycle to itself');
     }
+
+    public function testAMachineDoesNotKeepThePayloadOfPastTransitionsAlive(): void
+    {
+        $machine = new Machine(new Definition('off', ['off', 'on'], [
+            Transition::on('FLIP', 'off', 'on')->withAfter(static fn() => null),
+            Transition::on('FLIP', 'on', 'off'),
+        ]));
+        $payload = new \stdClass();
+        $probe = \WeakReference::create($payload);
+
+        $machine->send('FLIP', ['order' => $payload]);
+        $machine->sendIfAllowed('NOPE', ['order' => $payload]);
+        unset($payload);
+
+        self::assertNull($probe->get(), 'nothing inside the machine still references the payload');
+    }
 }
