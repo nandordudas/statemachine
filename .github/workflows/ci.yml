@@ -49,9 +49,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output mago.tar.gz
+          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output "$RUNNER_TEMP/mago.tar.gz"
           mkdir -p "$HOME/.local/bin"
-          tar -xzf mago.tar.gz -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
+          tar -xzf "$RUNNER_TEMP/mago.tar.gz" -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: composer validate --strict
