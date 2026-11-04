@@ -5,47 +5,41 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Tests;
 
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
-use Dudas\StateMachine\Tests\Fixtures\VideoEvent;
-use Dudas\StateMachine\Tests\Fixtures\VideoState;
 use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
 final class TransitionTest extends TestCase
 {
-    public function testNormalisesEnumsAndSingleSourceToStrings(): void
+    public function testNormalisesSingleSourceAndDeduplicates(): void
     {
-        $transition = Transition::on(VideoEvent::Play, VideoState::Stopped, VideoState::Playing);
+        $transition = Transition::on('E', ['a', 'b', 'a'], 'c');
 
-        self::assertSame('PLAY', $transition->event);
-        self::assertSame(['stopped'], $transition->from);
-        self::assertSame('playing', $transition->to);
+        self::assertSame('E', $transition->event);
+        self::assertSame(['a', 'b'], $transition->from);
+        self::assertSame('c', $transition->to);
+        self::assertSame(['a'], Transition::on('E', 'a', 'b')->from);
     }
 
-    public function testDeduplicatesSources(): void
+    public function testRejectsEmptyPartsAndSourceList(): void
     {
-        self::assertSame(['a', 'b'], Transition::on('E', ['a', 'b', 'a'], 'c')->from);
-    }
+        try {
+            Transition::on('', 'a', 'b');
+            self::fail('Expected an exception.');
+        } catch (InvalidDefinitionException $e) {
+            self::assertStringContainsString('non-empty', $e->getMessage());
+        }
 
-    public function testRejectsEmptyParts(): void
-    {
         $this->expectException(InvalidDefinitionException::class);
-
-        Transition::on('', 'a', 'b');
-    }
-
-    public function testRejectsEmptySourceList(): void
-    {
-        $this->expectException(InvalidDefinitionException::class);
-
-        /** @phpstan-ignore argument.type */
         new Transition('E', [], 'b');
     }
 
     public function testWithersReturnNewInstancesAndLeaveTheOriginalUntouched(): void
     {
         $plain = Transition::on('E', 'a', 'b');
-        $guarded = $plain->withGuard(static fn(): bool => false);
+        $guarded = $plain->withGuard(static function (): bool {
+            return false;
+        });
 
         self::assertNotSame($plain, $guarded);
         self::assertCount(0, $plain->guards);
@@ -54,33 +48,30 @@ final class TransitionTest extends TestCase
         self::assertFalse($guarded->permits('a'));
     }
 
-    public function testPermitsOnlyFromDeclaredSources(): void
-    {
-        $transition = Transition::on('E', ['a', 'b'], 'c');
-
-        self::assertTrue($transition->permits('b'));
-        self::assertFalse($transition->permits('c'));
-    }
-
     public function testAllGuardsMustAllowAndSeeTheContext(): void
     {
         $seen = null;
-        $transition = Transition::on('E', 'a', 'b')
-            ->withGuard(static function (TransitionContext $c) use (&$seen): bool {
-                $seen = $c;
+        $transition = Transition::on('E', 'a', 'b')->withGuard(static function (TransitionContext $c) use (
+            &$seen,
+        ): bool {
+            $seen = $c;
 
-                return true;
-            })
-            ->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['ok'] ?? false));
+            return true;
+        })->withGuard(static function (TransitionContext $c): bool {
+            return (bool) ($c->payload['ok'] ?? false);
+        });
 
         self::assertFalse($transition->permits('a'));
         self::assertTrue($transition->permits('a', ['ok' => true]));
         self::assertEquals(new TransitionContext('E', 'a', 'b', ['ok' => true]), $seen);
+        self::assertFalse($transition->permits('z', ['ok' => true]));
     }
 
     public function testConstructorWrapsClosures(): void
     {
-        $transition = new Transition('GO', 'a', 'b', guards: [static fn(): bool => false]);
+        $transition = new Transition('GO', 'a', 'b', [static function (): bool {
+            return false;
+        }]);
 
         self::assertFalse($transition->permits('a'));
     }

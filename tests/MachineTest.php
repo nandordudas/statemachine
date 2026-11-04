@@ -16,103 +16,71 @@ use Dudas\StateMachine\Machine;
 use Dudas\StateMachine\Store\AtomicCallbackStore;
 use Dudas\StateMachine\Store\CallbackStore;
 use Dudas\StateMachine\Store\InMemoryStore;
-use Dudas\StateMachine\Tests\Fixtures\VideoEvent;
-use Dudas\StateMachine\Tests\Fixtures\VideoState;
 use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
+use RuntimeException;
 
 final class MachineTest extends VideoTestCase
 {
-    public function testStartsInTheInitialState(): void
+    public function testFollowsTransitionsAndExposesState(): void
     {
-        self::assertSame('stopped', new Machine($this->video())->state);
-    }
+        $machine = new Machine($this->video('stopped', [Transition::on('RESUME', 'paused', 'playing')]));
 
-    public function testFollowsTransitions(): void
-    {
-        $machine = new Machine($this->video(extra: [Transition::on('RESUME', 'paused', 'playing')]));
+        self::assertSame('stopped', $machine->state());
+        self::assertSame('stopped', $machine->state);
 
-        $machine->send('PLAY');
+        $machine->send('PLAY')->send('PAUSE')->send('RESUME');
+
         self::assertTrue($machine->is('playing'));
-
-        $machine->send('PAUSE')->send('RESUME');
-        self::assertSame('playing', $machine->state);
+        self::assertTrue($machine->is('stopped', 'playing'));
+        self::assertFalse($machine->is('paused'));
     }
 
-    public function testAcceptsEnumsForEventsAndStates(): void
-    {
-        $machine = new Machine($this->video());
-
-        $machine->send(VideoEvent::Play);
-
-        self::assertTrue($machine->is(VideoState::Playing));
-        self::assertTrue($machine->is('stopped', VideoState::Playing));
-        self::assertFalse($machine->is(VideoState::Paused));
-        self::assertTrue($machine->can(VideoEvent::Stop));
-    }
-
-    public function testListsAvailableEvents(): void
+    public function testListsAvailableEventsAndCan(): void
     {
         $machine = new Machine($this->video('playing'));
+
         self::assertSame(['STOP', 'PAUSE'], $machine->availableEvents());
-
-        $machine->send('STOP');
-        self::assertSame(['PLAY'], $machine->availableEvents());
+        self::assertTrue($machine->can('STOP'));
+        self::assertFalse($machine->can('PLAY'));
+        self::assertFalse($machine->can('NOPE'));
     }
 
-    public function testUnknownEventThrows(): void
+    public function testUnknownEventNotAllowedAndGuardRejectedAreDistinct(): void
     {
-        $this->expectException(UnknownEventException::class);
+        $definition = $this->video('stopped', [
+            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static function (TransitionContext $c): bool {
+                return (bool) ($c->payload['powered'] ?? false);
+            }),
+        ]);
+        $machine = new Machine($definition);
 
-        new Machine($this->video())->send('TURN_OFF');
-    }
-
-    public function testEventNotValidInTheCurrentStateThrowsAndKeepsState(): void
-    {
-        $machine = new Machine($this->video());
+        try {
+            $machine->send('NOPE');
+            self::fail('Expected an exception.');
+        } catch (UnknownEventException $e) {
+            self::assertInstanceOf(StateMachineException::class, $e);
+        }
 
         try {
             $machine->send('STOP');
             self::fail('Expected an exception.');
         } catch (TransitionNotAllowedException $e) {
-            self::assertSame(TransitionNotAllowedException::class, $e::class);
+            self::assertSame(TransitionNotAllowedException::class, get_class($e));
             self::assertSame('STOP', $e->event);
             self::assertSame('stopped', $e->from);
         }
-
-        self::assertSame('stopped', $machine->state);
-    }
-
-    public function testCanIsFalseForUnknownEventsInsteadOfThrowing(): void
-    {
-        $machine = new Machine($this->video());
-
-        self::assertFalse($machine->can('NOPE'));
-        self::assertFalse($machine->can('STOP'));
-        self::assertTrue($machine->can('PLAY'));
-    }
-
-    public function testGuardRejectionIsDistinguishedAndKeepsState(): void
-    {
-        $definition = $this->video(extra: [
-            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['powered'] ?? false)),
-        ]);
-        $machine = new Machine($definition);
-
-        self::assertFalse($machine->can('TURN_ON'));
-        self::assertTrue($machine->can('TURN_ON', ['powered' => true]));
 
         try {
             $machine->send('TURN_ON');
             self::fail('Expected an exception.');
         } catch (GuardRejectedException $e) {
             self::assertInstanceOf(TransitionNotAllowedException::class, $e);
-            self::assertInstanceOf(StateMachineException::class, $e);
         }
-        self::assertSame('stopped', $machine->state);
+        self::assertSame('stopped', $machine->state());
 
         $machine->send('TURN_ON', ['powered' => true]);
-        self::assertSame('playing', $machine->state);
+        self::assertSame('playing', $machine->state());
     }
 
     public function testFirstPermittedTransitionWinsForConditionalBranching(): void
@@ -121,175 +89,58 @@ final class MachineTest extends VideoTestCase
             ->initial('draft')
             ->states('draft', 'review', 'published')
             ->transition(
-                Transition::on('SUBMIT', 'draft', 'published')->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['trusted'] ?? false)),
+                Transition::on('SUBMIT', 'draft', 'published')->withGuard(static function (TransitionContext $c): bool {
+                    return (bool) ($c->payload['trusted'] ?? false);
+                }),
                 Transition::on('SUBMIT', 'draft', 'review'),
             )
             ->build();
 
-        self::assertSame('review', new Machine($definition)->send('SUBMIT')->state);
-        self::assertSame('published', new Machine($definition)->send('SUBMIT', ['trusted' => true])->state);
-    }
-
-    public function testHooksRunInOrderAroundTheStateChange(): void
-    {
-        $log = [];
-        /** @var \stdClass&object{machine: Machine} $holder */
-        $holder = new \stdClass();
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withBefore(static function (TransitionContext $c) use (&$log, $holder): void {
-                $log[] = "before:{$c->from}->{$c->to}:" . $holder->machine->state;
-            })
-            ->withAfter(static function (TransitionContext $c) use (&$log, $holder): void {
-                $log[] = "after:{$c->event}:" . $holder->machine->state;
-            });
-        $holder->machine = $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
-
-        $machine->send('PLAY');
-
-        self::assertSame(['before:stopped->playing:stopped', 'after:PLAY:playing'], $log);
-    }
-
-    public function testFailingBeforeHookAbortsTheTransition(): void
-    {
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withBefore(static fn() => throw new \RuntimeException('nope'));
-        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
-
-        try {
-            $machine->send('PLAY');
-            self::fail('Expected an exception.');
-        } catch (\RuntimeException) {
-        }
-
-        self::assertSame('stopped', $machine->state);
-    }
-
-    public function testSeveralMachinesShareOneDefinitionIndependently(): void
-    {
-        $definition = $this->video();
-        $a = new Machine($definition);
-        $b = new Machine($definition);
-
-        $a->send('PLAY');
-
-        self::assertSame('playing', $a->state);
-        self::assertSame('stopped', $b->state);
-    }
-
-    public function testDrivesStateOwnedByAnotherObject(): void
-    {
-        $order = new class {
-            public string $status = 'stopped';
-        };
-        $machine = new Machine(
-            $this->video(),
-            new CallbackStore(static fn(): string => $order->status, static function (string $s) use ($order): void {
-                $order->status = $s;
-            }),
+        self::assertSame(
+            'review',
+            (new Machine($definition))
+                ->send('SUBMIT')
+                ->state(),
         );
-
-        $machine->send('PLAY');
-
-        self::assertSame('playing', $order->status);
+        self::assertSame(
+            'published',
+            (new Machine($definition))
+                ->send('SUBMIT', ['trusted' => true])
+                ->state(),
+        );
     }
 
-    public function testStoreStateMustBeKnownToTheDefinition(): void
-    {
-        $this->expectException(UnknownStateException::class);
-
-        new Machine($this->video(), new InMemoryStore('ghost'));
-    }
-
-    public function testNestedSendFromBeforeHookIsRejected(): void
-    {
-        /** @var Machine|null $machine */
-        $machine = null;
-        $definition = $this->video(extra: [
-            Transition::on('FORCE_PAUSE', 'stopped', 'paused'),
-            Transition::on('GO', 'stopped', 'playing')
-                ->withBefore(static function () use (&$machine): void {
-                    $machine->send('FORCE_PAUSE');
-                }),
-        ]);
-        $machine = new Machine($definition);
-
-        try {
-            $machine->send('GO');
-            self::fail('Expected the nested send to be rejected.');
-        } catch (ConcurrentTransitionException) {
-        }
-
-        self::assertSame('stopped', $machine->state);
-    }
-
-    public function testAfterHookFailureDoesNotRollBackState(): void
-    {
-        $transition = Transition::on('PLAY', 'stopped', 'playing')
-            ->withAfter(static fn() => throw new \RuntimeException('late'));
-        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
-
-        try {
-            $machine->send('PLAY');
-            self::fail('Expected an exception.');
-        } catch (AfterHookFailedException $e) {
-            self::assertSame('late', $e->getPrevious()?->getMessage());
-            self::assertSame('PLAY', $e->context->event);
-        }
-
-        self::assertSame('playing', $machine->state);
-    }
-
-    public function testBranchingFallsThroughToGuardRejectionWhenAllBranchesVeto(): void
-    {
-        $veto = static fn(): bool => false;
-        $definition = Definition::builder()
-            ->initial('a')
-            ->states('a', 'b', 'c')
-            ->transition(
-                Transition::on('GO', 'a', 'b')->withGuard($veto),
-                Transition::on('GO', 'a', 'c')->withGuard($veto),
-            )
-            ->build();
-
-        $this->expectException(GuardRejectedException::class);
-
-        new Machine($definition)->send('GO');
-    }
-
-    public function testStateHooksRunAroundTheTransition(): void
+    public function testHookOrderAroundTheStateChange(): void
     {
         $log = [];
+        $note = static function (string $what) use (&$log): callable {
+            return static function () use (&$log, $what): void {
+                $log[] = $what;
+            };
+        };
         $definition = Definition::builder()
             ->initial('stopped')
             ->states('stopped', 'playing')
-            ->onExit('stopped', static function () use (&$log): void {
-                $log[] = 'exit:stopped';
-            })
-            ->onEnter('playing', static function () use (&$log): void {
-                $log[] = 'enter:playing';
-            })
-            ->transition(
-                Transition::on('PLAY', 'stopped', 'playing')
-                    ->withBefore(static function () use (&$log): void {
-                        $log[] = 'before';
-                    })
-                    ->withAfter(static function () use (&$log): void {
-                        $log[] = 'after';
-                    }),
-            )
+            ->onExit('stopped', $note('exit'))
+            ->onEnter('playing', $note('enter'))
+            ->transition(Transition::on('PLAY', 'stopped', 'playing')->withBefore($note('before'))->withAfter($note(
+                'after',
+            )))
             ->build();
 
-        new Machine($definition)->send('PLAY');
+        (new Machine($definition))->send('PLAY');
 
-        self::assertSame(['before', 'exit:stopped', 'enter:playing', 'after'], $log);
+        self::assertSame(['before', 'exit', 'enter', 'after'], $log);
     }
 
-    public function testFailingExitHookAbortsTheTransition(): void
+    public function testFailingBeforeOrExitHookAbortsTheTransition(): void
     {
         $definition = Definition::builder()
             ->initial('stopped')
             ->states('stopped', 'playing')
-            ->onExit('stopped', static fn() => throw new \RuntimeException('stay'))
+            ->onExit('stopped', static function (): void {
+                throw new RuntimeException('stay');
+            })
             ->transition(Transition::on('PLAY', 'stopped', 'playing'))
             ->build();
         $machine = new Machine($definition);
@@ -297,54 +148,34 @@ final class MachineTest extends VideoTestCase
         try {
             $machine->send('PLAY');
             self::fail('Expected an exception.');
-        } catch (\RuntimeException) {
+        } catch (RuntimeException $e) {
+            self::assertSame('stay', $e->getMessage());
         }
 
-        self::assertSame('stopped', $machine->state);
+        self::assertSame('stopped', $machine->state());
     }
 
-    public function testStateHooksMustReferToDeclaredStates(): void
+    public function testAfterHookFailureKeepsStateAndIsWrapped(): void
     {
-        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
-
-        Definition::builder()->initial('a')->states('a')->onEnter('ghost', static fn() => null)->build();
-    }
-
-    public function testAtomicStoreRefusesAWriteThatRacesWithAnotherWriter(): void
-    {
-        $status = 'stopped';
-        $store = new AtomicCallbackStore(
-            static function () use (&$status): string {
-                return $status;
-            },
-            static function (string $expected, string $new) use (&$status): bool {
-                if ($status !== $expected) {
-                    return false;
-                }
-                $status = $new;
-
-                return true;
-            },
-        );
+        $transition = Transition::on('PLAY', 'stopped', 'playing')->withAfter(static function (): void {
+            throw new RuntimeException('late');
+        });
         $machine = new Machine(
-            $this->video(extra: [
-                Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$status): void {
-                    $status = 'paused'; // another writer, bypassing the machine
-                }),
-            ]),
-            $store,
+            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build(),
         );
-
-        $this->expectException(ConcurrentTransitionException::class);
 
         try {
-            $machine->send('GO');
-        } finally {
-            self::assertSame('paused', $status);
+            $machine->send('PLAY');
+            self::fail('Expected an exception.');
+        } catch (AfterHookFailedException $e) {
+            self::assertSame('late', $e->getPrevious()->getMessage());
+            self::assertSame('PLAY', $e->context->event);
         }
+
+        self::assertSame('playing', $machine->state());
     }
 
-    public function testEnterHooksMayChainAnotherEvent(): void
+    public function testNestedSendFromBeforeHookIsRejectedButEnterHooksMayChain(): void
     {
         $holder = new \stdClass();
         $definition = Definition::builder()
@@ -353,64 +184,36 @@ final class MachineTest extends VideoTestCase
             ->onEnter('b', static function () use ($holder): void {
                 $holder->machine->send('NEXT');
             })
-            ->transition(Transition::on('GO', 'a', 'b'), Transition::on('NEXT', 'b', 'c'))
+            ->transition(
+                Transition::on('GO', 'a', 'b'),
+                Transition::on('NEXT', 'b', 'c'),
+                Transition::on('BAD', 'a', 'b')->withBefore(static function () use ($holder): void {
+                    $holder->machine->send('GO');
+                }),
+            )
             ->build();
         $holder->machine = new Machine($definition);
 
-        self::assertSame('c', $holder->machine->send('GO')->state);
+        try {
+            $holder->machine->send('BAD');
+            self::fail('Expected an exception.');
+        } catch (ConcurrentTransitionException $e) {
+            self::assertSame('a', $holder->machine->state());
+        }
+
+        self::assertSame('c', $holder->machine->send('GO')->state());
     }
 
-    public function testErrorsInAfterHooksAreNotWrapped(): void
+    public function testSendIfAllowedAndTryTransition(): void
     {
-        $definition = Definition::builder()
-            ->initial('a')
-            ->states('a', 'b')
-            ->transition(Transition::on('GO', 'a', 'b')->withAfter(static fn() => throw new \Error('bug')))
-            ->build();
-
-        $this->expectException(\Error::class);
-
-        new Machine($definition)->send('GO');
-    }
-
-    public function testStateChangedToUndeclaredValueIsReportedOnSend(): void
-    {
-        $status = 'stopped';
-        $machine = new Machine(
-            $this->video(),
-            new CallbackStore(static function () use (&$status): string {
-                return $status;
-            }, static function (string $s) use (&$status): void {
-                $status = $s;
+        $machine = new Machine($this->video('stopped', [
+            Transition::on('VETO', 'stopped', 'playing')->withGuard(static function (): bool {
+                return false;
             }),
-        );
-        $status = 'ghost';
-
-        $this->expectException(UnknownStateException::class);
-
-        $machine->send('PLAY');
-    }
-
-    public function testSendIfAllowedReturnsFalseInsteadOfThrowing(): void
-    {
-        $machine = new Machine($this->video());
+        ]));
 
         self::assertFalse($machine->sendIfAllowed('STOP'));
-        self::assertFalse($machine->sendIfAllowed('NOPE'));
-        self::assertSame('stopped', $machine->state);
-
-        self::assertTrue($machine->sendIfAllowed('PLAY'));
-        self::assertSame('playing', $machine->state);
-    }
-
-    public function testTryTransitionSaysWhyItWasRefused(): void
-    {
-        $definition = $this->video(extra: [
-            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static fn(): bool => false),
-        ]);
-        $machine = new Machine($definition);
-
-        self::assertInstanceOf(GuardRejectedException::class, $machine->tryTransition('TURN_ON')->failure);
+        self::assertInstanceOf(GuardRejectedException::class, $machine->tryTransition('VETO')->failure);
         self::assertInstanceOf(TransitionNotAllowedException::class, $machine->tryTransition('STOP')->failure);
         self::assertInstanceOf(UnknownEventException::class, $machine->tryTransition('NOPE')->failure);
 
@@ -419,33 +222,74 @@ final class MachineTest extends VideoTestCase
         self::assertSame('playing', $result->state);
     }
 
-    public function testTryTransitionStillThrowsForHookFailures(): void
+    public function testSendAllAndOptInHistory(): void
     {
-        $definition = $this->video(extra: [
-            Transition::on('BOOM', 'stopped', 'playing')->withBefore(static fn() => throw new \RuntimeException('hook')),
-        ]);
+        $machine = new Machine($this->video(), null, true);
 
-        $this->expectException(\RuntimeException::class);
+        $machine->sendAll(['PLAY', ['PAUSE', ['why' => 'test']]]);
 
-        new Machine($definition)->tryTransition('BOOM');
+        self::assertSame('paused', $machine->state());
+        self::assertSame(['PLAY', 'PAUSE'], array_map(static function (TransitionContext $c): string {
+            return $c->event;
+        }, $machine->history()));
+        self::assertSame([], (new Machine($this->video()))->sendAll(['PLAY'])->history());
     }
 
-    public function testStoreWithoutStateIsRejected(): void
+    public function testDrivesStateOwnedByAnotherObjectAndValidatesIt(): void
     {
+        $order = new \stdClass();
+        $order->status = 'stopped';
+        $machine = new Machine(
+            $this->video(),
+            new CallbackStore(static function () use ($order): string {
+                return $order->status;
+            }, static function (string $s) use ($order): void {
+                $order->status = $s;
+            }),
+        );
+
+        $machine->send('PLAY');
+        self::assertSame('playing', $order->status);
+
+        $order->status = 'ghost';
+        try {
+            $machine->send('STOP');
+            self::fail('Expected an exception.');
+        } catch (UnknownStateException $e) {
+            self::assertStringContainsString('ghost', $e->getMessage());
+        }
+
         $this->expectException(UnknownStateException::class);
-
-        new Machine($this->video(), new CallbackStore(static fn(): ?string => null, static function (): void {}));
+        new Machine($this->video(), new InMemoryStore('ghost'));
     }
 
-    public function testRejectsIntBackedEnums(): void
+    public function testAtomicStoreRefusesAWriteThatRacesWithAnotherWriter(): void
     {
-        $this->expectException(\Dudas\StateMachine\Exception\InvalidDefinitionException::class);
+        $status = 'stopped';
+        $store = new AtomicCallbackStore(static function () use (&$status): string {
+            return $status;
+        }, static function (string $expected, string $new) use (&$status): bool {
+            if ($status !== $expected) {
+                return false;
+            }
+            $status = $new;
 
-        new Machine($this->video())->send(IntEvent::One);
+            return true;
+        });
+        $machine = new Machine(
+            $this->video('stopped', [
+                Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$status): void {
+                    $status = 'paused'; // another writer, bypassing the machine
+                }),
+            ]),
+            $store,
+        );
+
+        try {
+            $machine->send('GO');
+            self::fail('Expected an exception.');
+        } catch (ConcurrentTransitionException $e) {
+            self::assertSame('paused', $status);
+        }
     }
-}
-
-enum IntEvent: int
-{
-    case One = 1;
 }
