@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Tests\Examples;
 
+use Dudas\StateMachine\Examples\Document\Document;
+use Dudas\StateMachine\Examples\Document\DocumentEvent;
 use Dudas\StateMachine\Examples\Document\DocumentFlow;
+use Dudas\StateMachine\Examples\Document\DocumentState;
 use Dudas\StateMachine\Examples\Payment\PaymentEvent as E;
 use Dudas\StateMachine\Examples\Payment\PaymentFlow;
 use Dudas\StateMachine\Examples\Payment\PaymentState as S;
@@ -77,34 +80,43 @@ final class RealWorldExamplesTest extends TestCase
 
     public function testDocumentWorkflowDrivesTheEntityStatus(): void
     {
-        $document = new class {
-            public string $status = 'draft';
-        };
+        $document = new Document();
+        $document->reviewer = 'bob';
         $notified = 0;
         $flow = DocumentFlow::machineFor($document, static function () use (&$notified): void {
             $notified++;
         });
 
-        $flow->send('SUBMIT');
-        self::assertSame('review', $document->status);
+        $flow->send(DocumentEvent::Submit);
+        self::assertSame(DocumentState::Review, $document->status);
 
-        self::assertFalse($flow->can('APPROVE', ['role' => 'approver', 'actor' => 'ann', 'author' => 'ann']), 'authors cannot approve their own work');
-        self::assertFalse($flow->can('APPROVE', ['role' => 'editor', 'actor' => 'bob', 'author' => 'ann']));
+        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'ann', 'author' => 'ann']), 'authors cannot approve their own work');
+        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'editor', 'actor' => 'bob', 'author' => 'ann']));
+        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'approver', 'author' => 'ann']), 'an anonymous actor is not an approver');
 
-        $flow->send('APPROVE', ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
+        $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
 
-        self::assertSame('published', $document->status);
+        self::assertSame(DocumentState::Published, $document->status);
+        self::assertNull($document->reviewer, 'leaving review clears the assignment');
         self::assertSame(1, $notified);
     }
 
     public function testTrustedAuthorsSkipReview(): void
     {
-        $document = new class {
-            public string $status = 'draft';
-        };
+        $document = new Document();
 
-        DocumentFlow::machineFor($document, static fn() => null)->send('SUBMIT', ['trustedAuthor' => true]);
+        DocumentFlow::machineFor($document, static fn() => null)->send(DocumentEvent::Submit, ['trustedAuthor' => true]);
 
-        self::assertSame('published', $document->status);
+        self::assertSame(DocumentState::Published, $document->status);
+    }
+
+    public function testRejectSendsTheDocumentBackToDraft(): void
+    {
+        $document = new Document(DocumentState::Review);
+
+        DocumentFlow::machineFor($document, static fn() => null)
+            ->send(DocumentEvent::Reject, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
+
+        self::assertSame(DocumentState::Draft, $document->status);
     }
 }

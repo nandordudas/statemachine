@@ -20,7 +20,10 @@
     "autoload": {
         "psr-4": {
             "Dudas\\StateMachine\\": "src/"
-        }
+        },
+        "files": [
+            "src/functions.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
