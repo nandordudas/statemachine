@@ -319,12 +319,10 @@ final class Machine implements StateMachine
     private function step(string $event, array $payload): TransitionContext|Refusal
     {
         $attempt = $this->attempt;
-        $attempt->transition = null;
-        $attempt->context = null;
 
         try {
-            $refusal = $this->store instanceof TransactionalStateStore
-                ? $this->store->transaction(fn(): ?Refusal => $this->prepare($event, $payload, $attempt))
+            $prepared = $this->store instanceof TransactionalStateStore
+                ? $this->store->transaction(fn(): Refusal|array => $this->prepare($event, $payload, $attempt))
                 : $this->prepare($event, $payload, $attempt);
         } catch (Throwable $e) {
             if ($attempt->transition !== null && $attempt->context !== null) {
@@ -336,17 +334,15 @@ final class Machine implements StateMachine
             throw $e;
         }
 
-        if ($refusal !== null) {
-            return $refusal;
+        if ($prepared instanceof Refusal) {
+            return $prepared;
         }
 
-        $transition = $attempt->transition;
-        $context = $attempt->context;
+        [$transition, $context] = $prepared;
 
-        if ($transition === null || $context === null) {
-            throw new LogicException('A transition that was not refused must have been applied.');
-        }
-
+        // Committed: nothing left to compensate, and the reused attempt must not keep the payload alive.
+        $attempt->transition = null;
+        $attempt->context = null;
         $this->phase = self::FINISHING;
 
         if ($this->recordHistory !== false) {
@@ -381,14 +377,16 @@ final class Machine implements StateMachine
     }
 
     /**
-     * Selects the transition, runs `before`/`onExit` hooks and writes the new state, recording progress
-     * in `$attempt` so a failure can be compensated.
+     * Selects the transition, runs `before`/`onExit` hooks and writes the new state. Progress is recorded
+     * in `$attempt`, so a failure part way can still be compensated.
      *
      * @param array<string, mixed> $payload
-     * @return Refusal|null why the event was refused, or null once the new state is written
+     * @return Refusal|array{Transition, TransitionContext} why the event was refused, or the applied transition
      */
-    private function prepare(string $event, array $payload, Attempt $attempt): ?Refusal
+    private function prepare(string $event, array $payload, Attempt $attempt): Refusal|array
     {
+        $attempt->transition = null;
+        $attempt->context = null;
         $this->phase = self::SELECTING;
         $from = $this->store->get();
 
@@ -441,7 +439,7 @@ final class Machine implements StateMachine
             $this->store->set($transition->to);
         }
 
-        return null;
+        return [$transition, $context];
     }
 
     /**
