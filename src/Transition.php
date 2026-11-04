@@ -142,6 +142,10 @@ final readonly class Transition
             return false;
         }
 
+        if ($this->guards === []) {
+            return true; // no context to build
+        }
+
         $context = $this->contextFor($from, $payload);
 
         return array_all($this->guards, static fn(Guard $guard): bool => $guard->allows($context));

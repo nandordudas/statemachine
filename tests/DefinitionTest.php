@@ -74,4 +74,22 @@ final class DefinitionTest extends VideoTestCase
 
         new Definition('a', ['a'], ['oops']);
     }
+
+    public function testIndexesTransitionsBySourceStateInDefinitionOrder(): void
+    {
+        $definition = Definition::fromTable('a', [
+            ['X', 'b', 'a'],
+            ['Y', 'a', 'b'],
+            ['X', 'a', 'c'],
+            ['Y', 'a', 'c'],
+        ]);
+
+        self::assertSame(['X', 'Y'], $definition->eventsFrom('a'), 'events keep their definition order');
+        self::assertSame(['b', 'c'], array_map(
+            static fn(Transition $t): string => $t->to,
+            $definition->transitionsFrom('a', 'Y'),
+        ));
+        self::assertSame([], $definition->transitionsFrom('c', 'X'));
+        self::assertSame([], $definition->eventsFrom('c'));
+    }
 }
