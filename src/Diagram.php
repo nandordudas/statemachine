@@ -27,7 +27,7 @@ final class Diagram
                     '    %s --> %s : %s',
                     self::id($from),
                     self::id($transition->to),
-                    self::label($transition),
+                    self::label($transition)
                 );
             }
         }
@@ -43,7 +43,7 @@ final class Diagram
             $lines[] = sprintf(
                 '    "%s" [shape=%s];',
                 addcslashes($state, '"\\'),
-                $state === $definition->initial ? 'doublecircle' : 'circle',
+                $state === $definition->initial ? 'doublecircle' : 'circle'
             );
         }
 
@@ -55,7 +55,7 @@ final class Diagram
                     '    "%s" -> "%s" [label="%s"];',
                     addcslashes($from, '"\\'),
                     addcslashes($transition->to, '"\\'),
-                    addcslashes(self::label($transition), '"\\'),
+                    addcslashes(self::label($transition), '"\\')
                 );
             }
         }

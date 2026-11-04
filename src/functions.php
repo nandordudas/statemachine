@@ -48,7 +48,7 @@ function machine(
     array $onEnter = [],
     array $onExit = [],
     ?StateStore $store = null,
-    bool $history = false,
+    bool $history = false
 ): Machine {
     return new Machine(
         new Definition(
@@ -56,10 +56,10 @@ function machine(
             $states,
             $transitions,
             array_map(__NAMESPACE__ . '\\listOf', $onEnter),
-            array_map(__NAMESPACE__ . '\\listOf', $onExit),
+            array_map(__NAMESPACE__ . '\\listOf', $onExit)
         ),
         $store,
-        $history,
+        $history
     );
 }
 

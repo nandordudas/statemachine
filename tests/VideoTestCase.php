@@ -21,7 +21,7 @@ abstract class VideoTestCase extends TestCase
             ->transition(...array_merge([
                 Transition::on('PLAY', ['stopped', 'paused'], 'playing'),
                 Transition::on('STOP', 'playing', 'stopped'),
-                Transition::on('PAUSE', 'playing', 'paused'),
+                Transition::on('PAUSE', 'playing', 'paused')
             ], $extra))
             ->build();
     }

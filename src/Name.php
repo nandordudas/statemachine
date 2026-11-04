@@ -19,7 +19,7 @@ final class Name
         if (!is_string($value)) {
             throw new InvalidDefinitionException(sprintf(
                 'States and events must be strings, %s given.',
-                is_object($value) ? get_class($value) : gettype($value),
+                is_object($value) ? get_class($value) : gettype($value)
             ));
         }
 

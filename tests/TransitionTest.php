@@ -52,7 +52,7 @@ final class TransitionTest extends TestCase
     {
         $seen = null;
         $transition = Transition::on('E', 'a', 'b')->withGuard(static function (TransitionContext $c) use (
-            &$seen,
+            &$seen
         ): bool {
             $seen = $c;
 

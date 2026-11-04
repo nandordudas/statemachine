@@ -25,10 +25,10 @@ final class AfterHookFailedException extends RuntimeException implements StateMa
                 $context->event,
                 $context->from,
                 $context->to,
-                $previous->getMessage(),
+                $previous->getMessage()
             ),
             0,
-            $previous,
+            $previous
         );
 
         $this->context = $context;

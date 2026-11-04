@@ -39,11 +39,11 @@ final class HelpersTest extends TestCase
                 }),
                 on('STOP', 'playing', 'stopped', static function (TransitionContext $c): bool {
                     return ($c->payload['allowed'] ?? false) === true;
-                }),
+                })
             ],
             ['playing' => static function () use (&$log): void {
                 $log[] = 'enter';
-            }],
+            }]
         );
 
         $video->send('PLAY');
@@ -60,12 +60,12 @@ final class HelpersTest extends TestCase
         self::assertTrue($reviewer->allows($this->context([
             'role' => 'approver',
             'actor' => 'bob',
-            'author' => 'ann',
+            'author' => 'ann'
         ])));
         self::assertFalse($reviewer->allows($this->context([
             'role' => 'approver',
             'actor' => 'ann',
-            'author' => 'ann',
+            'author' => 'ann'
         ])));
         self::assertFalse($reviewer->allows($this->context(['role' => 'editor', 'actor' => 'bob', 'author' => 'ann'])));
 
@@ -85,7 +85,7 @@ final class HelpersTest extends TestCase
             },
             static function (): bool {
                 return false;
-            },
+            }
         ]);
 
         self::assertFalse($transition->permits('a'));

@@ -51,7 +51,7 @@ final class MachineTest extends VideoTestCase
         $definition = $this->video('stopped', [
             Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static function (TransitionContext $c): bool {
                 return (bool) ($c->payload['powered'] ?? false);
-            }),
+            })
         ]);
         $machine = new Machine($definition);
 
@@ -92,7 +92,7 @@ final class MachineTest extends VideoTestCase
                 Transition::on('SUBMIT', 'draft', 'published')->withGuard(static function (TransitionContext $c): bool {
                     return (bool) ($c->payload['trusted'] ?? false);
                 }),
-                Transition::on('SUBMIT', 'draft', 'review'),
+                Transition::on('SUBMIT', 'draft', 'review')
             )
             ->build();
 
@@ -100,13 +100,13 @@ final class MachineTest extends VideoTestCase
             'review',
             (new Machine($definition))
                 ->send('SUBMIT')
-                ->state(),
+                ->state()
         );
         self::assertSame(
             'published',
             (new Machine($definition))
                 ->send('SUBMIT', ['trusted' => true])
-                ->state(),
+                ->state()
         );
     }
 
@@ -124,7 +124,7 @@ final class MachineTest extends VideoTestCase
             ->onExit('stopped', $note('exit'))
             ->onEnter('playing', $note('enter'))
             ->transition(Transition::on('PLAY', 'stopped', 'playing')->withBefore($note('before'))->withAfter($note(
-                'after',
+                'after'
             )))
             ->build();
 
@@ -161,7 +161,7 @@ final class MachineTest extends VideoTestCase
             throw new RuntimeException('late');
         });
         $machine = new Machine(
-            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build(),
+            Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build()
         );
 
         try {
@@ -189,7 +189,7 @@ final class MachineTest extends VideoTestCase
                 Transition::on('NEXT', 'b', 'c'),
                 Transition::on('BAD', 'a', 'b')->withBefore(static function () use ($holder): void {
                     $holder->machine->send('GO');
-                }),
+                })
             )
             ->build();
         $holder->machine = new Machine($definition);
@@ -209,7 +209,7 @@ final class MachineTest extends VideoTestCase
         $machine = new Machine($this->video('stopped', [
             Transition::on('VETO', 'stopped', 'playing')->withGuard(static function (): bool {
                 return false;
-            }),
+            })
         ]));
 
         self::assertFalse($machine->sendIfAllowed('STOP'));
@@ -245,7 +245,7 @@ final class MachineTest extends VideoTestCase
                 return $order->status;
             }, static function (string $s) use ($order): void {
                 $order->status = $s;
-            }),
+            })
         );
 
         $machine->send('PLAY');
@@ -280,9 +280,9 @@ final class MachineTest extends VideoTestCase
             $this->video('stopped', [
                 Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$status): void {
                     $status = 'paused'; // another writer, bypassing the machine
-                }),
+                })
             ]),
-            $store,
+            $store
         );
 
         try {
