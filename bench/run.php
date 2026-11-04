@@ -5,6 +5,9 @@ declare(strict_types=1);
 /**
  * Micro-benchmarks and memory checks: `php bench/run.php [iterations]`.
  * Prints operations per second and the memory each scenario retains after garbage collection.
+ *
+ * Runs against older versions too (CI compares the pull request with its base on the same runner):
+ * scenarios for API an older version lacks are skipped.
  */
 
 use Dudas\StateMachine\Definition;
@@ -20,6 +23,7 @@ use function Dudas\StateMachine\on;
 require __DIR__ . '/../vendor/autoload.php';
 
 $n = (int) ($argv[1] ?? 50_000);
+$current = method_exists(Machine::class, 'stream'); // 2.x with stores, generators and bounded history
 
 /**
  * @param Closure(int): mixed $body
@@ -99,8 +103,10 @@ $atomic = new Machine($toggle, new AtomicCallbackStore(static function () use (&
 }));
 bench('send() AtomicCallbackStore', $n, static fn() => $atomic->send('FLIP'));
 
-$locking = new Machine($toggle, new LockingStore(new InMemoryStore('off'), static fn(Closure $work): mixed => $work()));
-bench('send() LockingStore', $n, static fn() => $locking->send('FLIP'));
+if ($current) {
+    $locking = new Machine($toggle, new LockingStore(new InMemoryStore('off'), static fn(Closure $work): mixed => $work()));
+    bench('send() LockingStore', $n, static fn() => $locking->send('FLIP'));
+}
 
 $ref = new stdClass();
 $chainDef = Definition::builder()
@@ -114,12 +120,18 @@ $chainDef = Definition::builder()
 $ref->machine = new Machine($chainDef);
 bench('send() + 1 event chained from onEnter', $n, static fn() => $ref->machine->send('GO'));
 
-$history = new Machine($toggle, recordHistory: 100);
-bench('send() with history: 100', $n, static fn() => $history->send('FLIP'));
+if ($current) {
+    $history = new Machine($toggle, recordHistory: 100);
+    bench('send() with history: 100', $n, static fn() => $history->send('FLIP'));
 
-bench('stream() 10 events', (int) ($n / 10), static function () use ($toggle): void {
-    foreach (new Machine($toggle)->stream(array_fill(0, 10, 'FLIP')) as $result) {
-    }
+    bench('stream() 10 events', (int) ($n / 10), static function () use ($toggle): void {
+        foreach (new Machine($toggle)->stream(array_fill(0, 10, 'FLIP')) as $result) {
+        }
+    });
+}
+
+bench('sendAll() 10 events', (int) ($n / 10), static function () use ($toggle): void {
+    new Machine($toggle)->sendAll(array_fill(0, 10, 'FLIP'));
 });
 
 bench('Definition with ' . count($wide) . ' transitions', (int) ($n / 100), static fn() => new Definition('s0', $states, $wide));
