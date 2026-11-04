@@ -46,12 +46,14 @@ final class DocumentFlow
                     static fn(TransitionContext $c): bool => ($c->payload['trustedAuthor'] ?? false) === true,
                 ),
                 Transition::on(E::Submit, S::Draft, S::Review),
-                Transition::on(E::Approve, S::Review, S::Published)
-                    ->withGuard(new ApproverGuard())
-                    ->withMeta(['label' => 'Approve', 'style' => 'primary']),
-                Transition::on(E::Reject, S::Review, S::Draft)
-                    ->withGuard(new ApproverGuard())
-                    ->withMeta(['label' => 'Send back', 'style' => 'danger']),
+                Transition::on(E::Approve, S::Review, S::Published)->withGuard(new ApproverGuard())->withMeta([
+                    'label' => 'Approve',
+                    'style' => 'primary',
+                ]),
+                Transition::on(E::Reject, S::Review, S::Draft)->withGuard(new ApproverGuard())->withMeta([
+                    'label' => 'Send back',
+                    'style' => 'danger',
+                ]),
                 Transition::on(E::Archive, S::Published, S::Archived),
             )
             ->build();

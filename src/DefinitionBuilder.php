@@ -94,7 +94,7 @@ final class DefinitionBuilder
     public function meta(string|BackedEnum $state, array $meta): self
     {
         $name = Name::of($state);
-        $this->stateMeta[$name] = [...$this->stateMeta[$name] ?? [], ...$meta];
+        $this->stateMeta[$name] = [...($this->stateMeta[$name] ?? []), ...$meta];
 
         return $this;
     }
