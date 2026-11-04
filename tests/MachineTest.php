@@ -16,6 +16,7 @@ use Dudas\StateMachine\Machine;
 use Dudas\StateMachine\Store\AtomicCallbackStore;
 use Dudas\StateMachine\Store\CallbackStore;
 use Dudas\StateMachine\Store\InMemoryStore;
+use Dudas\StateMachine\Tests\Fixtures\IntEvent;
 use Dudas\StateMachine\Tests\Fixtures\VideoEvent;
 use Dudas\StateMachine\Tests\Fixtures\VideoState;
 use Dudas\StateMachine\Transition;
@@ -142,7 +143,8 @@ final class MachineTest extends VideoTestCase
             ->withAfter(static function (TransitionContext $c) use (&$log, $holder): void {
                 $log[] = "after:{$c->event}:" . $holder->machine->state;
             });
-        $holder->machine = $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
+        $machine = new Machine(Definition::builder()->initial('stopped')->states('stopped', 'playing')->transition($transition)->build());
+        $holder->machine = $machine;
 
         $machine->send('PLAY');
 
@@ -443,9 +445,4 @@ final class MachineTest extends VideoTestCase
 
         new Machine($this->video())->send(IntEvent::One);
     }
-}
-
-enum IntEvent: int
-{
-    case One = 1;
 }
