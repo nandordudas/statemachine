@@ -43,16 +43,7 @@ function on(
     Hook|callable|array $abort = [],
     array $meta = [],
 ): Transition {
-    return new Transition(
-        $event,
-        $from,
-        $to,
-        listOf($guard),
-        listOf($before),
-        listOf($after),
-        listOf($abort),
-        $meta,
-    );
+    return new Transition($event, $from, $to, listOf($guard), listOf($before), listOf($after), listOf($abort), $meta);
 }
 
 /**

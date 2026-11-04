@@ -30,18 +30,22 @@ final class MetaTest extends TestCase
     public function testGuardsAndHooksSeeTheTransitionsMeta(): void
     {
         $seen = [];
-        $machine = machine(initial: 'a', states: ['a', 'b'], transitions: [
-            on(
-                'GO',
-                'a',
-                'b',
-                guard: static fn(TransitionContext $c): bool => ($c->payload['role'] ?? null) === $c->meta['role'],
-                after: static function (TransitionContext $c) use (&$seen): void {
-                    $seen = $c->meta;
-                },
-                meta: ['role' => 'editor'],
-            ),
-        ]);
+        $machine = machine(
+            initial: 'a',
+            states: ['a', 'b'],
+            transitions: [
+                on(
+                    'GO',
+                    'a',
+                    'b',
+                    guard: static fn(TransitionContext $c): bool => ($c->payload['role'] ?? null) === $c->meta['role'],
+                    after: static function (TransitionContext $c) use (&$seen): void {
+                        $seen = $c->meta;
+                    },
+                    meta: ['role' => 'editor'],
+                ),
+            ],
+        );
 
         self::assertFalse($machine->can('GO', ['role' => 'guest']));
 
@@ -75,12 +79,20 @@ final class MetaTest extends TestCase
 
     public function testAvailableTransitionsHandTheirMetaToAUi(): void
     {
-        $machine = new Machine(new Definition('review', ['review', 'published', 'draft'], [
-            on('APPROVE', 'review', 'published', guard: static fn(): bool => false, meta: ['label' => 'Approve']),
-            on('APPROVE', 'review', 'published', meta: ['label' => 'Approve anyway']),
-            on('REJECT', 'review', 'draft', meta: ['label' => 'Send back']),
-            on('EDIT', 'draft', 'review'),
-        ]));
+        $machine = new Machine(
+            new Definition(
+                'review',
+                ['review', 'published', 'draft'],
+                [
+                    on('APPROVE', 'review', 'published', guard: static fn(): bool => false, meta: [
+                        'label' => 'Approve',
+                    ]),
+                    on('APPROVE', 'review', 'published', meta: ['label' => 'Approve anyway']),
+                    on('REJECT', 'review', 'draft', meta: ['label' => 'Send back']),
+                    on('EDIT', 'draft', 'review'),
+                ],
+            ),
+        );
 
         $labels = array_map(
             static fn(Transition $t): mixed => $t->meta['label'] ?? null,
@@ -96,10 +108,9 @@ final class MetaTest extends TestCase
             ->initial('draft')
             ->states('draft', 'review')
             ->meta('review', ['label' => 'In "review"'])
-            ->transition(
-                Transition::on('SUBMIT', 'draft', 'review')->withMeta(['label' => 'Submit']),
-                Transition::on('REJECT', 'review', 'draft')->withGuard(static fn(): bool => true),
-            )
+            ->transition(Transition::on('SUBMIT', 'draft', 'review')->withMeta([
+                'label' => 'Submit',
+            ]), Transition::on('REJECT', 'review', 'draft')->withGuard(static fn(): bool => true))
             ->build();
 
         $mermaid = $definition->toMermaid();
