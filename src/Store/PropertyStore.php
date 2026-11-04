@@ -17,10 +17,16 @@ use ReflectionProperty;
  * Writes convert back to the property's enum type, so the entity can never hold an invalid status.
  *
  *     new PropertyStore($order, 'status');
+ *
+ * Not atomic: two processes that loaded the same entity can both apply a transition. Give
+ * `machineFor()` a `compareAndSet` callback, or wrap the store in a {@see LockingStore}, for shared rows.
  */
 final readonly class PropertyStore implements StateStore
 {
     private ReflectionProperty $property;
+
+    /** @var class-string<BackedEnum>|null the property's backed enum type, if it has one */
+    private ?string $enum;
 
     public function __construct(
         private object $target,
@@ -31,6 +37,44 @@ final readonly class PropertyStore implements StateStore
         }
 
         $this->property = new ReflectionProperty($target, $property);
+
+        if ($this->property->isReadOnly()) {
+            throw new InvalidDefinitionException(sprintf(
+                'Property "%s" of %s is readonly; the machine cannot write the state into it.',
+                $property,
+                $target::class,
+            ));
+        }
+
+        $type = $this->property->getType();
+        $name = $type instanceof ReflectionNamedType ? $type->getName() : null;
+        $this->enum = $name !== null && enum_exists($name) && is_subclass_of($name, BackedEnum::class)
+            ? $name
+            : null;
+    }
+
+    /**
+     * Fails fast when the property cannot hold every state, instead of in the middle of a transition.
+     *
+     * @param list<string> $states
+     * @throws InvalidDefinitionException
+     */
+    public function assertCanHold(array $states): void
+    {
+        if ($this->enum === null) {
+            return;
+        }
+
+        foreach ($states as $state) {
+            if ($this->enum::tryFrom($state) === null) {
+                throw new InvalidDefinitionException(sprintf(
+                    'State "%s" is not a case of %s, the type of property "%s".',
+                    $state,
+                    $this->enum,
+                    $this->property->getName(),
+                ));
+            }
+        }
     }
 
     public function get(): string
@@ -54,13 +98,14 @@ final readonly class PropertyStore implements StateStore
 
     public function set(string $state): void
     {
-        $type = $this->property->getType();
-        $enum = $type instanceof ReflectionNamedType
-        && enum_exists($type->getName())
-        && is_subclass_of($type->getName(), BackedEnum::class)
-            ? $type->getName()
-            : null;
+        if ($this->enum === null) {
+            $this->property->setValue($this->target, $state);
 
-        $this->property->setValue($this->target, $enum !== null ? $enum::from($state) : $state);
+            return;
+        }
+
+        $this->property->setValue($this->target, $this->enum::tryFrom($state) ?? throw UnknownStateException::named(
+            $state,
+        ));
     }
 }

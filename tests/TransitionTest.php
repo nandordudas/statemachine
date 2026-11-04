@@ -11,6 +11,8 @@ use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
+use function Dudas\StateMachine\on;
+
 final class TransitionTest extends TestCase
 {
     public function testNormalisesEnumsAndSingleSourceToStrings(): void
@@ -83,5 +85,15 @@ final class TransitionTest extends TestCase
         $transition = new Transition('GO', 'a', 'b', guards: [static fn(): bool => false]);
 
         self::assertFalse($transition->permits('a'));
+    }
+
+    public function testAbortHooksAreAddedImmutably(): void
+    {
+        $plain = Transition::on('GO', 'a', 'b');
+        $compensating = $plain->withAbort(static fn() => null);
+
+        self::assertSame([], $plain->abort);
+        self::assertCount(1, $compensating->abort);
+        self::assertCount(2, on('GO', 'a', 'b', abort: [static fn() => null, static fn() => null])->abort);
     }
 }

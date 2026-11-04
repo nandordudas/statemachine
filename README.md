@@ -62,15 +62,33 @@ $flow->sendAll([E::Submit, [E::Approve, $payload]]);
 
 $definition->toMermaid();                         // stateDiagram-v2 text; toDot() for Graphviz
 $definition->unreachableStates();                 // lint: states nothing can reach
-machine(..., history: true)->history();           // opt-in log of applied transitions
+machine(..., history: true)->history();           // opt-in log of applied transitions (history: 50 keeps the last 50)
 ```
 
-`anyOf()` is the OR counterpart of `allOf()`. History grows without bound, so it is off by default.
+`anyOf()` is the OR counterpart of `allOf()`. `history: true` grows without bound, so history is off by default.
+
+### Generators
+
+```php
+foreach ($machine->stream($queueConsumer) as $result) {   // lazy: one TransitionResult per event, refusals don't stop it
+    if (!$result->ok()) { $log->warning($result->failure->getMessage()); }
+}
+
+$machine->drive((function () {                            // a process that branches on each outcome
+    $review = yield E::Submit;
+    if ($review->ok()) {
+        yield [E::Approve, ['role' => 'approver']];
+    }
+})());
+
+foreach ($definition->shortestPaths() as $state => $events) { /* events that reach $state, e.g. for tests */ }
+```
 
 ## Design
 
 - `Definition` is an immutable, validated blueprint (shareable); `Machine` is the runtime instance.
-- State lives in a `StateStore` (`InMemoryStore` by default, `CallbackStore` to drive a property of an entity).
+- State lives in a `StateStore` (`InMemoryStore` by default, `CallbackStore`/`PropertyStore` to drive a property of an
+  entity, `AtomicCallbackStore` for a compare-and-set on a shared row, `LockingStore` to decide under a lock).
 - States and events may be strings or backed enums.
 - Guards (`Guard`) and hooks (`Hook`) are interfaces; closures are wrapped automatically.
 - Several transitions may share event + source state; the first whose guards pass wins.
@@ -93,15 +111,41 @@ machine(..., history: true)->history();           // opt-in log of applied trans
 | Unknown event | `UnknownEventException` |
 | No transition from the current state | `TransitionNotAllowedException` |
 | Transition exists but every guard vetoes | `GuardRejectedException` |
-| `before` or `onExit` hook throws | transition aborted, state unchanged, exception propagates |
-| State changed during `before` hooks (nested `send`) | `ConcurrentTransitionException`, stale transition not applied |
-| `onEnter`/`after` hook throws | state is already changed and is **not** rolled back; wrapped in `AfterHookFailedException` (original in `getPrevious()`, context in `->context`) |
+| `before` or `onExit` hook throws | transition aborted, state unchanged, the transition's `abort` hooks run, exception propagates |
+| `send()` from a `before`/`onExit` hook | `ConcurrentTransitionException`, stale transition not applied |
+| State changed during `before`/`onExit` hooks, or the atomic write lost the race | `ConcurrentTransitionException`, `abort` hooks run |
+| `send()` from a guard (also inside `can()`) | `ConcurrentTransitionException` |
+| `send()` from another fiber while a transition is running | `ConcurrentTransitionException` (reads stay possible) |
+| `send()`/`tryTransition()` from an `onEnter`/`after` hook | queued; applied after every hook of the current transition, inside the outer call |
+| A queued `send()` is refused | its exception propagates from the outer call; the outer transition stays applied |
+| A queued `tryTransition()`/`sendIfAllowed()` is refused | dropped; the hook got a result with `->queued === true` |
+| Hooks keep chaining events (a cycle) | `ChainLimitExceededException` after `maxChainedEvents` (default 100) |
+| `onEnter`/`after` hook throws `Exception` | state already changed, **not** rolled back; the remaining hooks still run; `AfterHookFailedException` (first in `getPrevious()`, all in `->failures`, context in `->context`); events they queued are dropped |
+| `onEnter`/`after` hook throws an `Error` | propagates unwrapped (a bug); the state has already changed |
 | Store holds an unknown or missing state | `UnknownStateException` |
+| `PropertyStore` property is readonly or its enum lacks a state | `InvalidDefinitionException` when the machine is built |
 
-Hooks must not call `send()` from `before`/`onExit` (`ConcurrentTransitionException`); chaining from `onEnter`/`after` is fine.
-Stores shared between writers should implement `AtomicStateStore` (`compareAndSet($expected, $new)`;
-`InMemoryStore` and `AtomicCallbackStore` do). The machine then refuses a write that lost the race
-with `ConcurrentTransitionException`; plain stores only get the check made before the write.
+`TransitionResult` carries `state` (the state this transition entered, or the unchanged state), `failure`,
+`context` (the applied `TransitionContext`) and `queued`. `sendAll()` is not atomic: earlier events stay applied
+when a later one fails (use `stream()` to see each outcome).
+
+### Concurrency
+
+- Check-then-act is racy: prefer `tryTransition()`/`sendIfAllowed()` to `if ($m->can($e)) { $m->send($e); }`.
+- **One process, one row:** `InMemoryStore`, `CallbackStore`, `PropertyStore` (`machineFor()`) are fine.
+- **Several processes, one row:** make the write conditional. `AtomicStateStore::compareAndSet($expected, $new)`
+  (`AtomicCallbackStore`, or `machineFor(..., compareAndSet: fn ($expected, $new) => $repo->update(...) === 1)`).
+  The loser gets `ConcurrentTransitionException`; retry by sending again (it re-reads the state and re-plans).
+  If the reader lags behind the write (an entity property nobody updated), `AtomicCallbackStore` reports the state it
+  wrote; pass `afterWrite:` to keep the entity in step.
+- **Guards that read more than the state** (a balance, a stock level): a compare-and-set on the status cannot notice
+  those changing. Wrap the store in a `LockingStore` (any `TransactionalStateStore`): selection, guards, `before`/`onExit`
+  hooks and the write run inside your transaction (`SELECT ... FOR UPDATE`), `onEnter`/`after` hooks after it returns.
+- **Side effects of `before`/`onExit` hooks** cannot be rolled back by the library: undo them in `abort` hooks
+  (`->withAbort()`, `on(..., abort: ...)`), or do them in `onEnter`/`after` hooks (or an outbox) instead.
+- **Fibers** (Revolt/Amp, Swoole, FrankenPHP): a machine instance applies one transition at a time; a send from another
+  fiber meanwhile is refused instead of interleaving. Use one machine per request/fiber, and an atomic store for shared rows.
+- **Long-running workers:** a `Definition` and its guard/hook objects are shared by every machine; keep them stateless.
 
 States and events must be strings or **string-backed** enums; int-backed enums are rejected.
 Guards may run twice (`can()` then `send()`), so keep them side-effect free.

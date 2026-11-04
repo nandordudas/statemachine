@@ -35,12 +35,16 @@ permitted wins**, so put the guarded one first.
 ## 3. Bind state to the entity
 
 `machineFor($definition, $entity, 'status')` (string or enum-typed property, public or not) or
-`new CallbackStore($get, $set)`. For shared rows use `AtomicCallbackStore` with `UPDATE ... WHERE status = :expected`.
+`new CallbackStore($get, $set)`. For shared rows make the write conditional: `machineFor(..., compareAndSet: fn ($old,
+$new) => $repo->update(...) === 1)` or `AtomicCallbackStore` (`UPDATE ... WHERE status = :expected`, `afterWrite:` to
+update the entity). When guards read other columns too, wrap the store in a `LockingStore` (`SELECT ... FOR UPDATE`).
 
 ## 4. Drive it
 
 `send()` throws; `sendIfAllowed()`/`tryTransition()` swallow only refusals. Catch `StateMachineException` for all
-library errors. Pass data via the payload array, read in guards/hooks through `TransitionContext`.
+library errors. Pass data via the payload array, read in guards/hooks through `TransitionContext`. Prefer
+`tryTransition()` over `can()` + `send()` (racy). For many events use `stream()` (yields results) or `drive()` (a
+generator process that receives each result).
 
 ## Rules of thumb
 
@@ -48,7 +52,9 @@ library errors. Pass data via the payload array, read in guards/hooks through `T
   when the rule is reused (see `examples/Document/ApproverGuard.php`).
 - Side effects go in hooks. `before`/`onExit` can veto; `onEnter`/`after` run after the write and failures are wrapped
   in `AfterHookFailedException` (no rollback).
-- Never call `send()` inside `before`/`onExit` (`ConcurrentTransitionException`); chaining from `onEnter`/`after` is fine.
+- Never call `send()` inside guards or `before`/`onExit` (`ConcurrentTransitionException`); from `onEnter`/`after` it is
+  queued and applied once the current transition has finished (cycles stop at `maxChainedEvents`).
+- Side effects of `before`/`onExit` that must be undone when the transition fails go in `abort` hooks (`->withAbort()`).
 - Check structure with `$definition->unreachableStates()`.
 - Worked examples: `examples/Payment`, `examples/Document`, `examples/OrderStatus`.
 

@@ -36,11 +36,16 @@ final readonly class Transition
     /** @var list<Hook> */
     public array $after;
 
+    /** @var list<Hook> run when the transition is aborted after its `before` hooks started */
+    public array $abort;
+
     /**
      * @param string|BackedEnum|non-empty-list<string|BackedEnum> $from
      * @param array<Guard|callable(TransitionContext): bool> $guards all must allow the transition
      * @param array<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
      * @param array<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
+     * @param array<Hook|callable(TransitionContext): mixed> $abort run when a `before`/`onExit` hook threw or the
+     *                                                             write lost a race: undo their side effects here
      */
     public function __construct(
         string|BackedEnum $event,
@@ -49,6 +54,7 @@ final readonly class Transition
         array $guards = [],
         array $before = [],
         array $after = [],
+        array $abort = [],
     ) {
         $this->event = Name::of($event);
         $this->to = Name::of($to);
@@ -64,6 +70,7 @@ final readonly class Transition
         $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
         $this->before = array_map(ClosureHook::wrap(...), array_values($before));
         $this->after = array_map(ClosureHook::wrap(...), array_values($after));
+        $this->abort = array_map(ClosureHook::wrap(...), array_values($abort));
     }
 
     /**
@@ -99,6 +106,18 @@ final readonly class Transition
     public function withAfter(Hook|callable $hook): self
     {
         return clone($this, ['after' => [...$this->after, ClosureHook::wrap($hook)]]);
+    }
+
+    /**
+     * Compensation for side effects of `before`/`onExit` hooks when the transition does not happen after all.
+     * The original failure still propagates (unless an abort hook throws, which replaces it).
+     *
+     * @param Hook|callable(TransitionContext): mixed $hook
+     */
+    #[\NoDiscard]
+    public function withAbort(Hook|callable $hook): self
+    {
+        return clone($this, ['abort' => [...$this->abort, ClosureHook::wrap($hook)]]);
     }
 
     public function leavesFrom(string $state): bool

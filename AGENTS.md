@@ -42,20 +42,26 @@ $flow = machineFor($definition, $entity, 'status'); // state in a string/enum-ty
 ```
 
 Pipeline of `send()`: select transition (guards, first permitted wins) → `before` hooks → `onExit` hooks → store write
-(`compareAndSet` for `AtomicStateStore`) → `onEnter` hooks → `after` hooks.
+(`compareAndSet` for `AtomicStateStore`) → `onEnter` hooks → `after` hooks. With a `TransactionalStateStore`
+(`LockingStore`) everything up to the write runs inside its transaction. Transitions run to completion: events sent from
+`onEnter`/`after` hooks are queued and drained in a loop after the current transition (bounded by `maxChainedEvents`).
 
 | Situation | Result |
 |---|---|
 | Unknown event | `UnknownEventException` |
 | No transition from current state | `TransitionNotAllowedException` |
 | All guards veto | `GuardRejectedException` (subclass of the above) |
-| `before`/`onExit` hook throws | aborted, state unchanged, exception propagates |
-| `send()` from a `before`/`onExit` hook, or state changed concurrently | `ConcurrentTransitionException` |
-| `onEnter`/`after` hook throws `Exception` | state already changed; wrapped in `AfterHookFailedException` |
+| `before`/`onExit` hook throws | aborted, state unchanged, `abort` hooks run, exception propagates |
+| `send()` from a `before`/`onExit` hook or a guard, from another fiber mid-transition, or state changed concurrently | `ConcurrentTransitionException` |
+| `send()` from an `onEnter`/`after` hook | queued, applied after the current transition; a cycle ends in `ChainLimitExceededException` |
+| `onEnter`/`after` hook throws `Exception` | state already changed; all hooks still run; `AfterHookFailedException` (`->failures`) |
 
 Guards must be side-effect free (they also run in `can()`/`availableEvents()`). Chain events from `onEnter`/`after`
-hooks only. Use `AtomicStateStore` (`AtomicCallbackStore`) for state shared between writers.
-Diagnostics: `$definition->toMermaid()`, `toDot()`, `unreachableStates()`; opt-in `machine(..., history: true)->history()`.
+hooks only. Use `AtomicStateStore` (`AtomicCallbackStore`, `machineFor(..., compareAndSet: ...)`) for state shared
+between writers, `LockingStore` when guards read more than the state; compensate `before` side effects in `abort` hooks.
+Generators: `$machine->stream($events)` yields a `TransitionResult` per event, `$machine->drive($generator)` feeds results
+back into a process, `$definition->shortestPaths()` yields the events reaching each state.
+Diagnostics: `$definition->toMermaid()`, `toDot()`, `unreachableStates()`; opt-in `machine(..., history: true|N)->history()`.
 
 ## Commands
 
