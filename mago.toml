@@ -1,0 +1,22 @@
+# Mago has no PHP 7.2 mode (minimum is 8.0), so this port is analysed as 8.0 and the rules that would
+# push PHP 7.3+/8.0 syntax (arrow functions, named arguments) are switched off.
+php-version = "8.0"
+
+[source]
+paths = ["src", "tests"]
+includes = ["vendor"]
+
+[linter.rules]
+literal-named-argument = { enabled = false }
+prefer-arrow-function = { enabled = false }
+function-name = { enabled = false }
+no-isset = { enabled = false }
+excessive-parameter-list = { enabled = false }
+too-many-methods = { enabled = false }
+kan-defect = { enabled = false }
+cyclomatic-complexity = { enabled = false }
+
+[analyzer]
+excludes = ["tests"]
+# Docblock-precision noise: PHP 7.2 has no `mixed` or union types, so callables/hooks are typed loosely.
+ignore = ["less-specific-nested-argument-type", "mixed-assignment", "deprecated-method", "redundant-cast", "impossible-condition", "mixed-operand", "redundant-type-comparison", "possibly-invalid-argument"]
