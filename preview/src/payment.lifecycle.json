@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Card Payment Lifecycle",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      980,
+      566
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "Happy path"
+    },
+    {
+      "id": "released",
+      "label": "Released"
+    },
+    {
+      "id": "endings",
+      "label": "Other endings"
+    }
+  ],
+  "states": [
+    {
+      "id": "pending",
+      "type": "start",
+      "label": "pending",
+      "sublabel": "awaiting gateway",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "authorized",
+      "type": "active",
+      "label": "authorized",
+      "sublabel": "funds held",
+      "lane": "main",
+      "col": 2,
+      "step": "02"
+    },
+    {
+      "id": "captured",
+      "type": "success",
+      "label": "captured",
+      "sublabel": "onEnter: book revenue",
+      "lane": "main",
+      "col": 4,
+      "step": "03"
+    },
+    {
+      "id": "declined",
+      "type": "failure",
+      "label": "declined",
+      "sublabel": "gateway said no",
+      "lane": "endings",
+      "col": 1,
+      "tag": "terminal",
+      "yOffset": 80
+    },
+    {
+      "id": "voided",
+      "type": "neutral",
+      "label": "voided",
+      "sublabel": "hold released",
+      "lane": "released",
+      "col": 0,
+      "tag": "terminal"
+    },
+    {
+      "id": "refunded",
+      "type": "neutral",
+      "label": "refunded",
+      "sublabel": "money returned",
+      "lane": "endings",
+      "col": 2,
+      "tag": "terminal",
+      "yOffset": 80
+    }
+  ],
+  "transitions": [
+    {
+      "id": "authorize",
+      "from": "pending",
+      "to": "authorized",
+      "label": "AUTHORIZE [approved]"
+    },
+    {
+      "id": "capture",
+      "from": "authorized",
+      "to": "captured",
+      "label": "CAPTURE"
+    },
+    {
+      "id": "decline",
+      "from": "pending",
+      "to": "declined",
+      "label": "AUTHORIZE",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "void",
+      "from": "authorized",
+      "to": "voided",
+      "label": "VOID",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelDy": 24
+    },
+    {
+      "id": "refund",
+      "from": "captured",
+      "to": "refunded",
+      "label": "REFUND [amount ≤ captured]",
+      "route": "straight",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "variant": "security",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Branching",
+      "items": [
+        "Both AUTHORIZE transitions leave pending",
+        "The guarded one wins when the gateway approved",
+        "Otherwise the payment is declined"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Guards",
+      "items": [
+        "REFUND only from captured",
+        "Never above the captured amount"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Shared row",
+      "items": [
+        "The status lives in a database row",
+        "An atomic store lets only one webhook worker win"
+      ]
+    }
+  ]
+}
