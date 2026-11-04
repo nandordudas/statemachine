@@ -6,21 +6,36 @@ namespace Dudas\StateMachine;
 
 use Closure;
 use Dudas\StateMachine\Contracts\Guard;
+use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
-final readonly class ClosureGuard implements Guard
+final class ClosureGuard implements Guard
 {
-    /**
-     * @param Closure(TransitionContext): bool $callback
-     */
-    public function __construct(private Closure $callback) {}
+    /** @var Closure */
+    private $callback;
 
-    public static function wrap(Guard|callable $guard): Guard
+    public function __construct(Closure $callback)
     {
-        return $guard instanceof Guard ? $guard : new self($guard(...));
+        $this->callback = $callback;
+    }
+
+    /**
+     * @param Guard|callable(TransitionContext): bool $guard
+     */
+    public static function wrap($guard): Guard
+    {
+        if ($guard instanceof Guard) {
+            return $guard;
+        }
+
+        if (!is_callable($guard)) {
+            throw new InvalidDefinitionException('A guard must be a Guard or a callable.');
+        }
+
+        return new self(Closure::fromCallable($guard));
     }
 
     public function allows(TransitionContext $context): bool
     {
-        return ($this->callback)($context);
+        return (bool) ($this->callback)($context);
     }
 }

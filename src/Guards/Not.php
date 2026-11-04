@@ -9,14 +9,15 @@ use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\TransitionContext;
 
 /** Inverts a guard. */
-final readonly class Not implements Guard
+final class Not implements Guard
 {
-    private Guard $guard;
+    /** @var Guard */
+    private $guard;
 
     /**
      * @param Guard|callable(TransitionContext): bool $guard
      */
-    public function __construct(Guard|callable $guard)
+    public function __construct($guard)
     {
         $this->guard = ClosureGuard::wrap($guard);
     }

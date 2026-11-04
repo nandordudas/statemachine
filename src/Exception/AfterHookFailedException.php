@@ -14,7 +14,10 @@ use Throwable;
  */
 final class AfterHookFailedException extends RuntimeException implements StateMachineException
 {
-    public function __construct(public readonly TransitionContext $context, Throwable $previous)
+    /** @var TransitionContext @readonly */
+    public $context;
+
+    public function __construct(TransitionContext $context, Throwable $previous)
     {
         parent::__construct(
             sprintf(
@@ -27,5 +30,7 @@ final class AfterHookFailedException extends RuntimeException implements StateMa
             0,
             $previous,
         );
+
+        $this->context = $context;
     }
 }

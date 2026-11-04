@@ -4,39 +4,43 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine;
 
-use BackedEnum;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
 /**
- * States and events are plain strings internally; backed enums are accepted
- * everywhere as a type-safe way to spell them.
+ * States and events are plain strings (PHP 7.2 has no enums; use class constants for type-safe names).
  */
 final class Name
 {
-    public static function of(string|BackedEnum $value): string
+    /**
+     * @param mixed $value
+     */
+    public static function of($value): string
     {
-        if (!$value instanceof BackedEnum) {
-            return $value;
+        if (!is_string($value)) {
+            throw new InvalidDefinitionException(sprintf(
+                'States and events must be strings, %s given.',
+                is_object($value) ? get_class($value) : gettype($value),
+            ));
         }
 
-        if (!is_string($value->value)) {
-            throw new InvalidDefinitionException(sprintf('%s is int-backed; only string-backed enums can name states and events.', $value::class));
-        }
-
-        return $value->value;
+        return $value;
     }
 
     /**
-     * @param string|BackedEnum|iterable<string|BackedEnum> $values
-     * @return list<string>
+     * @param string|string[] $values
+     * @return string[]
      */
-    public static function listOf(string|BackedEnum|iterable $values): array
+    public static function listOf($values): array
     {
-        if (is_string($values) || $values instanceof BackedEnum) {
-            return [self::of($values)];
+        if (is_string($values)) {
+            return [$values];
         }
 
-        return array_values(array_unique(array_map(self::of(...), [...$values])));
+        if (!is_array($values)) {
+            throw new InvalidDefinitionException('Expected a name or a list of names.');
+        }
+
+        return array_values(array_unique(array_map([self::class, 'of'], $values)));
     }
 
     private function __construct() {}

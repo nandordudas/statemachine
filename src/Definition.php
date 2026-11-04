@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine;
 
-use BackedEnum;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
 
@@ -15,38 +14,42 @@ use Dudas\StateMachine\Exception\InvalidDefinitionException;
  * Several transitions may share an event and source state; the first whose guards
  * allow it wins, which expresses conditional branching.
  */
-final readonly class Definition
+final class Definition
 {
-    public string $initial;
+    /** @var string @readonly */
+    public $initial;
 
-    /** @var non-empty-list<string> */
-    public array $states;
+    /** @var string[] @readonly non-empty */
+    public $states;
 
-    /** @var list<Transition> */
-    public array $transitions;
+    /** @var Transition[] @readonly */
+    public $transitions;
 
-    /** @var list<string> */
-    private array $eventNames;
+    /** @var string[] */
+    private $eventNames;
 
-    /** @var array<string, list<Transition>> transitions grouped by event, in declaration order */
-    private array $byEvent;
+    /** @var array<string, Transition[]> transitions grouped by event, in declaration order */
+    private $byEvent;
 
-    /** @var array<string, list<Hook>> run after the machine has entered the state */
-    private array $onEnter;
+    /** @var array<string, Hook[]> */
+    private $onEnter;
 
-    /** @var array<string, list<Hook>> run before the machine leaves the state */
-    private array $onExit;
+    /** @var array<string, Hook[]> */
+    private $onExit;
 
     /**
-     * @param string|BackedEnum $initial
-     * @param list<string|BackedEnum> $states
-     * @param list<Transition> $transitions
-     * @param array<string, list<Hook>> $onEnter hooks by state name
-     * @param array<string, list<Hook>> $onExit hooks by state name
+     * @param string[] $states
+     * @param Transition[] $transitions
+     * @param array<string, Hook[]|Hook|callable> $onEnter hooks by state name
+     * @param array<string, Hook[]|Hook|callable> $onExit hooks by state name
      */
-    public function __construct(string|BackedEnum $initial, array $states, array $transitions, array $onEnter = [], array $onExit = [])
-    {
-        $initial = Name::of($initial);
+    public function __construct(
+        string $initial,
+        array $states,
+        array $transitions,
+        array $onEnter = [],
+        array $onExit = [],
+    ) {
         $known = Name::listOf($states);
 
         if ($known === []) {
@@ -65,10 +68,13 @@ final readonly class Definition
 
         foreach ($transitions as $transition) {
             if (!$transition instanceof Transition) {
-                throw new InvalidDefinitionException(sprintf('Transitions must be instances of %s.', Transition::class));
+                throw new InvalidDefinitionException(sprintf(
+                    'Transitions must be instances of %s.',
+                    Transition::class,
+                ));
             }
 
-            foreach ([...$transition->from, $transition->to] as $state) {
+            foreach (array_merge($transition->from, [$transition->to]) as $state) {
                 if (!in_array($state, $known, true)) {
                     throw new InvalidDefinitionException(sprintf(
                         'Transition "%s" refers to undeclared state "%s".',
@@ -82,7 +88,11 @@ final readonly class Definition
         foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
                 if (!in_array((string) $state, $known, true)) {
-                    throw new InvalidDefinitionException(sprintf('%s hook refers to undeclared state "%s".', $kind, $state));
+                    throw new InvalidDefinitionException(sprintf(
+                        '%s hook refers to undeclared state "%s".',
+                        $kind,
+                        $state,
+                    ));
                 }
             }
         }
@@ -100,23 +110,19 @@ final readonly class Definition
             $names[$transition->event] = true;
         }
         $this->byEvent = $byEvent;
-        $this->eventNames = array_map(strval(...), array_keys($names));
+        $this->eventNames = array_map('strval', array_keys($names));
     }
 
     /**
-     * @param array<string, iterable<Hook|callable>> $byState
-     * @return array<string, list<Hook>>
+     * @param array<string, Hook[]|Hook|callable> $byState
+     * @return array<string, Hook[]>
      */
     private static function normalizeHooks(array $byState): array
     {
         $normalized = [];
 
         foreach ($byState as $state => $hooks) {
-            if (!is_iterable($hooks)) {
-                throw new InvalidDefinitionException(sprintf('State hooks for "%s" must be a list of hooks.', $state));
-            }
-
-            foreach ($hooks as $hook) {
+            foreach (is_array($hooks) ? $hooks : [$hooks] as $hook) {
                 $normalized[(string) $state][] = ClosureHook::wrap($hook);
             }
         }
@@ -124,34 +130,29 @@ final readonly class Definition
         return $normalized;
     }
 
+    public static function builder(): DefinitionBuilder
+    {
+        return new DefinitionBuilder();
+    }
+
     /**
      * Guard-less definition from a plain table of `[event, from, to]` rows; states are inferred.
      * `from` may be a list of states. Use the builder when you need guards or hooks.
      *
-     *     Definition::fromTable(S::Draft, [
-     *         [E::Submit, S::Draft, S::Review],
-     *         [E::Approve, S::Review, S::Published],
-     *     ]);
-     *
-     * @param list<array{string|BackedEnum, string|BackedEnum|list<string|BackedEnum>, string|BackedEnum}> $rows
+     * @param array<int, array{0: string, 1: string|string[], 2: string}> $rows
      */
-    public static function fromTable(string|BackedEnum $initial, array $rows): self
+    public static function fromTable(string $initial, array $rows): self
     {
         $states = [$initial];
         $transitions = [];
 
-        foreach ($rows as [$event, $from, $to]) {
-            $transition = Transition::on($event, $from, $to);
+        foreach ($rows as $row) {
+            $transition = Transition::on($row[0], $row[1], $row[2]);
             $transitions[] = $transition;
-            array_push($states, ...$transition->from, ...[$transition->to]);
+            $states = array_merge($states, $transition->from, [$transition->to]);
         }
 
         return new self($initial, $states, $transitions);
-    }
-
-    public static function builder(): DefinitionBuilder
-    {
-        return new DefinitionBuilder();
     }
 
     public function toMermaid(): string
@@ -168,7 +169,7 @@ final readonly class Definition
      * Declared states no sequence of events can reach from the initial state (guards are ignored:
      * this finds structural dead ends, e.g. a forgotten transition).
      *
-     * @return list<string>
+     * @return string[]
      */
     public function unreachableStates(): array
     {
@@ -186,7 +187,9 @@ final readonly class Definition
             }
         }
 
-        return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
+        return array_values(array_filter($this->states, static function (string $s) use ($reached): bool {
+            return !isset($reached[$s]);
+        }));
     }
 
     public function hasState(string $state): bool
@@ -195,7 +198,7 @@ final readonly class Definition
     }
 
     /**
-     * @return list<string>
+     * @return string[]
      */
     public function events(): array
     {
@@ -208,7 +211,7 @@ final readonly class Definition
     }
 
     /**
-     * @return list<Transition> in declaration order
+     * @return Transition[] in declaration order
      */
     public function transitionsFor(string $event): array
     {
@@ -216,7 +219,7 @@ final readonly class Definition
     }
 
     /**
-     * @return list<Hook>
+     * @return Hook[]
      */
     public function enterHooksFor(string $state): array
     {
@@ -224,7 +227,7 @@ final readonly class Definition
     }
 
     /**
-     * @return list<Hook>
+     * @return Hook[]
      */
     public function exitHooksFor(string $state): array
     {

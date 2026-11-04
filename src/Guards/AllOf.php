@@ -6,24 +6,27 @@ namespace Dudas\StateMachine\Guards;
 
 use Dudas\StateMachine\ClosureGuard;
 use Dudas\StateMachine\Contracts\Guard;
+use Dudas\StateMachine\Support;
 use Dudas\StateMachine\TransitionContext;
 
 /** Allows when every inner guard allows. Short-circuits on the first veto. */
-final readonly class AllOf implements Guard
+final class AllOf implements Guard
 {
-    /** @var list<Guard> */
-    private array $guards;
+    /** @var Guard[] */
+    private $guards;
 
     /**
      * @param Guard|callable(TransitionContext): bool ...$guards
      */
-    public function __construct(Guard|callable ...$guards)
+    public function __construct(...$guards)
     {
-        $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
+        $this->guards = array_map([ClosureGuard::class, 'wrap'], array_values($guards));
     }
 
     public function allows(TransitionContext $context): bool
     {
-        return array_all($this->guards, static fn(Guard $guard): bool => $guard->allows($context));
+        return Support::all($this->guards, static function (Guard $guard) use ($context): bool {
+            return $guard->allows($context);
+        });
     }
 }
