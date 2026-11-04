@@ -15,15 +15,15 @@ final class GroupRules
 {
     /** @var list<array{G, G}> */
     private const array MOVEMENTS = [
-        [G::None, G::Incoming],
-        [G::None, G::Inactive],
-        [G::None, G::Serving],
+        [G::None,     G::Incoming],
+        [G::None,     G::Inactive],
+        [G::None,     G::Serving],
         [G::Incoming, G::Serving],
-        [G::Serving, G::Incoming],
+        [G::Serving,  G::Incoming],
         [G::Incoming, G::Inactive],
         [G::Inactive, G::Incoming],
-        [G::Serving, G::Inactive],
-        [G::Serving, G::Served],
+        [G::Serving,  G::Inactive],
+        [G::Serving,  G::Served],
     ];
 
     public static function allows(S $from, S $to): bool

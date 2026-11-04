@@ -23,14 +23,23 @@ final class HelpersTest extends TestCase
             initial: S::Stopped,
             states: S::class,
             transitions: [
-                on(E::Play, from: S::Stopped, to: S::Playing, after: static function (TransitionContext $c) use (&$log): void {
+                on(E::Play, from: S::Stopped, to: S::Playing, after: static function (TransitionContext $c) use (
+                    &$log,
+                ): void {
                     $log[] = "after:{$c->event}";
                 }),
-                on(E::Stop, S::Playing, S::Stopped, guard: static fn(TransitionContext $c): bool => ($c->payload['allowed'] ?? false) === true),
+                on(
+                    E::Stop,
+                    S::Playing,
+                    S::Stopped,
+                    guard: static fn(TransitionContext $c): bool => ($c->payload['allowed'] ?? false) === true,
+                ),
             ],
-            onEnter: [S::Playing->value => static function () use (&$log): void {
-                $log[] = 'enter:playing';
-            }],
+            onEnter: [
+                S::Playing->value => static function () use (&$log): void {
+                    $log[] = 'enter:playing';
+                },
+            ],
         );
 
         $video->send(E::Play);

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Tests\Examples;
 
-use Dudas\StateMachine\Exception\GuardRejectedException;
-use Dudas\StateMachine\Exception\TransitionNotAllowedException;
 use Dudas\StateMachine\Examples\OrderStatus\OrderFlow;
 use Dudas\StateMachine\Examples\OrderStatus\OrderStatus as S;
 use Dudas\StateMachine\Examples\OrderStatus\StatusGroup as G;
+use Dudas\StateMachine\Exception\GuardRejectedException;
+use Dudas\StateMachine\Exception\TransitionNotAllowedException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -39,7 +39,11 @@ final class OrderStatusTest extends TestCase
                 }
 
                 foreach ([false, true] as $pickup) {
-                    yield sprintf('%s -> %s%s', $old->value, $new->value, $pickup ? ' (pickup)' : '') => [$old, $new, $pickup];
+                    yield sprintf('%s -> %s%s', $old->value, $new->value, $pickup ? ' (pickup)' : '') => [
+                        $old,
+                        $new,
+                        $pickup,
+                    ];
                 }
             }
         }
@@ -130,7 +134,10 @@ final class OrderStatusTest extends TestCase
 
     public function testSentBackCanOnlyBeReturned(): void
     {
-        self::assertEqualsCanonicalizing([S::Returned->value, S::SentBack->value], OrderFlow::machine(S::SentBack)->availableEvents());
+        self::assertEqualsCanonicalizing(
+            [S::Returned->value, S::SentBack->value],
+            OrderFlow::machine(S::SentBack)->availableEvents(),
+        );
     }
 
     public function testReturnedIsTerminal(): void

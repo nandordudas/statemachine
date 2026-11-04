@@ -10,7 +10,10 @@ use Dudas\StateMachine\TransitionContext;
 /** Allows when two payload entries are strictly identical (both missing counts as equal). */
 final readonly class PayloadsEqual implements Guard
 {
-    public function __construct(private string $a, private string $b) {}
+    public function __construct(
+        private string $a,
+        private string $b,
+    ) {}
 
     public function allows(TransitionContext $context): bool
     {

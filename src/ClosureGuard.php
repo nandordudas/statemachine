@@ -12,7 +12,9 @@ final readonly class ClosureGuard implements Guard
     /**
      * @param Closure(TransitionContext): bool $callback
      */
-    public function __construct(private Closure $callback) {}
+    public function __construct(
+        private Closure $callback,
+    ) {}
 
     public static function wrap(Guard|callable $guard): Guard
     {

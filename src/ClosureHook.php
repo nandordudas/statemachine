@@ -12,7 +12,9 @@ final readonly class ClosureHook implements Hook
     /**
      * @param Closure(TransitionContext): mixed $callback
      */
-    public function __construct(private Closure $callback) {}
+    public function __construct(
+        private Closure $callback,
+    ) {}
 
     public static function wrap(Hook|callable $hook): Hook
     {

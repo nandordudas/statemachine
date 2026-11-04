@@ -39,8 +39,9 @@ final class DocumentFlow
             ->onExit(S::Review, $clearReviewer)
             ->onEnter(S::Published, $notifySubscribers)
             ->transition(
-                Transition::on(E::Submit, S::Draft, S::Published)
-                    ->withGuard(static fn(TransitionContext $c): bool => ($c->payload['trustedAuthor'] ?? false) === true),
+                Transition::on(E::Submit, S::Draft, S::Published)->withGuard(
+                    static fn(TransitionContext $c): bool => ($c->payload['trustedAuthor'] ?? false) === true,
+                ),
                 Transition::on(E::Submit, S::Draft, S::Review),
                 Transition::on(E::Approve, S::Review, S::Published)->withGuard(new ApproverGuard()),
                 Transition::on(E::Reject, S::Review, S::Draft)->withGuard(new ApproverGuard()),
@@ -58,12 +59,11 @@ final class DocumentFlow
             self::definition($notifySubscribers, static function () use ($document): void {
                 $document->reviewer = null;
             }),
-            new CallbackStore(
-                static fn(): S => $document->status,
-                static function (string $status) use ($document): void {
-                    $document->status = S::from($status);
-                },
-            ),
+            new CallbackStore(static fn(): S => $document->status, static function (string $status) use (
+                $document,
+            ): void {
+                $document->status = S::from($status);
+            }),
         );
     }
 }

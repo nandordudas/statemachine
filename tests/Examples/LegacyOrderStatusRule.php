@@ -13,15 +13,15 @@ namespace Dudas\StateMachine\Tests\Examples;
 final class LegacyOrderStatusRule
 {
     private const array MOVEMENTS = [
-        ['', 'active/incoming'],
-        ['', 'inactive'],
-        ['', 'active/serving'],
+        ['',                'active/incoming'],
+        ['',                'inactive'],
+        ['',                'active/serving'],
         ['active/incoming', 'active/serving'],
-        ['active/serving', 'active/incoming'],
+        ['active/serving',  'active/incoming'],
         ['active/incoming', 'inactive'],
-        ['inactive', 'active/incoming'],
-        ['active/serving', 'inactive'],
-        ['active/serving', 'served'],
+        ['inactive',        'active/incoming'],
+        ['active/serving',  'inactive'],
+        ['active/serving',  'served'],
     ];
 
     /**

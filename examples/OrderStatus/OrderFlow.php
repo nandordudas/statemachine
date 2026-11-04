@@ -25,10 +25,10 @@ final class OrderFlow
                 continue;
             }
 
-            $sources = array_values(array_filter(
-                OrderStatus::cases(),
-                static fn(OrderStatus $source): bool => GroupRules::allows($source, $target),
-            ));
+            $sources = array_values(array_filter(OrderStatus::cases(), static fn(OrderStatus $source): bool => GroupRules::allows(
+                $source,
+                $target,
+            )));
 
             if ($sources !== []) {
                 $transitions[] = Transition::on($target, $sources, $target)->withGuard(new LocalPickupGuard());

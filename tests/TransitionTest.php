@@ -65,13 +65,13 @@ final class TransitionTest extends TestCase
     public function testAllGuardsMustAllowAndSeeTheContext(): void
     {
         $seen = null;
-        $transition = Transition::on('E', 'a', 'b')
-            ->withGuard(static function (TransitionContext $c) use (&$seen): bool {
-                $seen = $c;
+        $transition = Transition::on('E', 'a', 'b')->withGuard(static function (TransitionContext $c) use (
+            &$seen,
+        ): bool {
+            $seen = $c;
 
-                return true;
-            })
-            ->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['ok'] ?? false));
+            return true;
+        })->withGuard(static fn(TransitionContext $c): bool => (bool) ($c->payload['ok'] ?? false));
 
         self::assertFalse($transition->permits('a'));
         self::assertTrue($transition->permits('a', ['ok' => true]));

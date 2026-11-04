@@ -17,8 +17,10 @@ final readonly class ApproverGuard implements Guard
     {
         $actor = $context->payload['actor'] ?? null;
 
-        return ($context->payload['role'] ?? null) === 'approver'
+        return (
+            ($context->payload['role'] ?? null) === 'approver'
             && $actor !== null
-            && $actor !== ($context->payload['author'] ?? null);
+            && $actor !== ($context->payload['author'] ?? null)
+        );
     }
 }

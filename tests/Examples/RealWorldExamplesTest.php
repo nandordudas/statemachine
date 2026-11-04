@@ -54,19 +54,16 @@ final class RealWorldExamplesTest extends TestCase
     public function testTwoWorkersCannotBothApplyTheSameWebhook(): void
     {
         $row = ['status' => 'pending'];
-        $store = static fn(): AtomicCallbackStore => new AtomicCallbackStore(
-            static function () use (&$row): string {
-                return $row['status'];
-            },
-            static function (string $expected, string $new) use (&$row): bool {
-                if ($row['status'] !== $expected) {
-                    return false;
-                }
-                $row['status'] = $new;
+        $store = static fn(): AtomicCallbackStore => new AtomicCallbackStore(static function () use (&$row): string {
+            return $row['status'];
+        }, static function (string $expected, string $new) use (&$row): bool {
+            if ($row['status'] !== $expected) {
+                return false;
+            }
+            $row['status'] = $new;
 
-                return true;
-            },
-        );
+            return true;
+        });
 
         $workerA = PaymentFlow::machine(static fn() => null, $store());
         $workerB = PaymentFlow::machine(static fn() => null, $store());
@@ -90,9 +87,19 @@ final class RealWorldExamplesTest extends TestCase
         $flow->send(DocumentEvent::Submit);
         self::assertSame(DocumentState::Review, $document->status);
 
-        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'ann', 'author' => 'ann']), 'authors cannot approve their own work');
-        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'editor', 'actor' => 'bob', 'author' => 'ann']));
-        self::assertFalse($flow->can(DocumentEvent::Approve, ['role' => 'approver', 'author' => 'ann']), 'an anonymous actor is not an approver');
+        self::assertFalse(
+            $flow->can(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'ann', 'author' => 'ann']),
+            'authors cannot approve their own work',
+        );
+        self::assertFalse($flow->can(DocumentEvent::Approve, [
+            'role' => 'editor',
+            'actor' => 'bob',
+            'author' => 'ann',
+        ]));
+        self::assertFalse(
+            $flow->can(DocumentEvent::Approve, ['role' => 'approver', 'author' => 'ann']),
+            'an anonymous actor is not an approver',
+        );
 
         $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
 
@@ -105,7 +112,9 @@ final class RealWorldExamplesTest extends TestCase
     {
         $document = new Document();
 
-        DocumentFlow::machineFor($document, static fn() => null)->send(DocumentEvent::Submit, ['trustedAuthor' => true]);
+        DocumentFlow::machineFor($document, static fn() => null)->send(DocumentEvent::Submit, [
+            'trustedAuthor' => true,
+        ]);
 
         self::assertSame(DocumentState::Published, $document->status);
     }
@@ -114,8 +123,11 @@ final class RealWorldExamplesTest extends TestCase
     {
         $document = new Document(DocumentState::Review);
 
-        DocumentFlow::machineFor($document, static fn() => null)
-            ->send(DocumentEvent::Reject, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
+        DocumentFlow::machineFor($document, static fn() => null)->send(DocumentEvent::Reject, [
+            'role' => 'approver',
+            'actor' => 'bob',
+            'author' => 'ann',
+        ]);
 
         self::assertSame(DocumentState::Draft, $document->status);
     }

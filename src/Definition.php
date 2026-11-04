@@ -44,8 +44,13 @@ final readonly class Definition
      * @param array<string, list<Hook>> $onEnter hooks by state name
      * @param array<string, list<Hook>> $onExit hooks by state name
      */
-    public function __construct(string|BackedEnum $initial, array $states, array $transitions, array $onEnter = [], array $onExit = [])
-    {
+    public function __construct(
+        string|BackedEnum $initial,
+        array $states,
+        array $transitions,
+        array $onEnter = [],
+        array $onExit = [],
+    ) {
         $initial = Name::of($initial);
         $known = Name::listOf($states);
 
@@ -65,7 +70,10 @@ final readonly class Definition
 
         foreach ($transitions as $transition) {
             if (!$transition instanceof Transition) {
-                throw new InvalidDefinitionException(sprintf('Transitions must be instances of %s.', Transition::class));
+                throw new InvalidDefinitionException(sprintf(
+                    'Transitions must be instances of %s.',
+                    Transition::class,
+                ));
             }
 
             foreach ([...$transition->from, $transition->to] as $state) {
@@ -82,7 +90,11 @@ final readonly class Definition
         foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
                 if (!in_array((string) $state, $known, true)) {
-                    throw new InvalidDefinitionException(sprintf('%s hook refers to undeclared state "%s".', $kind, $state));
+                    throw new InvalidDefinitionException(sprintf(
+                        '%s hook refers to undeclared state "%s".',
+                        $kind,
+                        $state,
+                    ));
                 }
             }
         }
