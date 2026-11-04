@@ -41,10 +41,7 @@ final class ConcurrentTransitionException extends LogicException implements Stat
 
     public static function sendFromGuard(string $event): self
     {
-        return new self(sprintf(
-            'Event "%s" was sent from a guard; guards must be free of side effects.',
-            $event,
-        ));
+        return new self(sprintf('Event "%s" was sent from a guard; guards must be free of side effects.', $event));
     }
 
     public static function lostRace(string $expected, string $state): self

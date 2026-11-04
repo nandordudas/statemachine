@@ -19,15 +19,21 @@ final class GeneratorTest extends TestCase
 {
     private function machine(): Machine
     {
-        return new Machine(new Definition('draft', ['draft', 'review', 'published'], [
-            on('SUBMIT', 'draft', 'review'),
-            on(
-                'APPROVE',
-                'review',
-                'published',
-                guard: static fn(TransitionContext $c): bool => ($c->payload['ok'] ?? false) === true,
+        return new Machine(
+            new Definition(
+                'draft',
+                ['draft', 'review', 'published'],
+                [
+                    on('SUBMIT', 'draft', 'review'),
+                    on(
+                        'APPROVE',
+                        'review',
+                        'published',
+                        guard: static fn(TransitionContext $c): bool => ($c->payload['ok'] ?? false) === true,
+                    ),
+                ],
             ),
-        ]));
+        );
     }
 
     public function testStreamTriesEventsLazilyAndKeepsGoingAfterARefusal(): void
@@ -71,7 +77,8 @@ final class GeneratorTest extends TestCase
     {
         $machine = $this->machine();
 
-        $outcome = $machine->drive((static function (): Generator {
+        /** @var Generator<int, string|array{string, array<string, mixed>}, TransitionResult, string> $process */
+        $process = (static function (): Generator {
             yield 'SUBMIT';
             $approved = yield 'APPROVE';
 
@@ -82,7 +89,9 @@ final class GeneratorTest extends TestCase
             }
 
             return 'approved at once';
-        })());
+        })();
+
+        $outcome = $machine->drive($process);
 
         self::assertSame('approved on second try', $outcome);
         self::assertSame('published', $machine->state);

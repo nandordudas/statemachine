@@ -27,7 +27,11 @@ final class AfterHookFailedException extends RuntimeException implements StateMa
         Throwable $previous,
         array $failures = [],
     ) {
-        $this->failures = $failures !== [] ? $failures : ($previous instanceof Exception ? [$previous] : []);
+        if ($failures === [] && $previous instanceof Exception) {
+            $failures = [$previous];
+        }
+
+        $this->failures = $failures;
 
         parent::__construct(
             sprintf(
