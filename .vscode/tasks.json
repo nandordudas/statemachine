@@ -1,0 +1,9 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "composer check", "type": "shell", "command": "composer check", "group": "test", "problemMatcher": [] },
+    { "label": "mago lint", "type": "shell", "command": "mago lint", "problemMatcher": [] },
+    { "label": "mago analyze", "type": "shell", "command": "mago analyze", "problemMatcher": [] },
+    { "label": "mago fmt", "type": "shell", "command": "mago fmt", "problemMatcher": [] }
+  ]
+}

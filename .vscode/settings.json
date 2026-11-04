@@ -1,0 +1,39 @@
+{
+  "editor.formatOnSave": true,
+  "editor.rulers": [
+    120
+  ],
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.exclude": {
+    ".phpunit.cache": true,
+    ".php-cs-fixer.cache": true
+  },
+  "search.exclude": {
+    "vendor": true,
+    "composer.lock": true
+  },
+  "[php]": {
+    "editor.defaultFormatter": "kellymears.vscode-mago",
+    "editor.tabSize": 4
+  },
+  "[json][jsonc][yaml][toml]": {
+    "editor.tabSize": 2
+  },
+  "php.validate.enable": false,
+  "intelephense.files.exclude": [
+    "**/vendor/**"
+  ],
+  "phpstan.configFile": "phpstan.neon.dist",
+  "phpunit.phpunit": "vendor/bin/phpunit",
+  "phpunit.args": [
+    "--configuration",
+    "phpunit.xml.dist"
+  ],
+  "cSpell.words": [
+    "Dudas",
+    "mago",
+    "nandordudas",
+    "shivammathur"
+  ]
+}
