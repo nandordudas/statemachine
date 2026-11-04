@@ -1,5 +1,5 @@
 {
-    "name": "nandordudas/state-machine-php72",
+    "name": "nandordudas/state-machine",
     "description": "PHP 7.2 compatible port of nandordudas/state-machine: a small, strictly typed finite state machine (no enums)",
     "type": "library",
     "license": "MIT",
@@ -11,9 +11,6 @@
     },
     "require": {
         "php": ">=7.2"
-    },
-    "conflict": {
-        "nandordudas/state-machine": "*"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^2.19",
