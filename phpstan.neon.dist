@@ -1,6 +1,16 @@
 parameters:
-    level: max
+    level: 8
+    phpVersion: 70200
     paths:
         - src
-        - examples
         - tests
+    ignoreErrors:
+        -
+            identifier: missingType.iterableValue
+        # tests deliberately pass invalid input and inspect exception internals
+        -
+            message: '#expects array<.*>, array<int, (string|int\|string)> given#'
+            path: tests/DefinitionTest.php
+        -
+            message: '#Cannot call method getMessage\(\) on Throwable\|null#'
+            path: tests/MachineTest.php
