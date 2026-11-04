@@ -390,6 +390,45 @@ final class MachineTest extends VideoTestCase
         $machine->send('PLAY');
     }
 
+    public function testSendIfAllowedReturnsFalseInsteadOfThrowing(): void
+    {
+        $machine = new Machine($this->video());
+
+        self::assertFalse($machine->sendIfAllowed('STOP'));
+        self::assertFalse($machine->sendIfAllowed('NOPE'));
+        self::assertSame('stopped', $machine->state);
+
+        self::assertTrue($machine->sendIfAllowed('PLAY'));
+        self::assertSame('playing', $machine->state);
+    }
+
+    public function testTryTransitionSaysWhyItWasRefused(): void
+    {
+        $definition = $this->video(extra: [
+            Transition::on('TURN_ON', 'stopped', 'playing')->withGuard(static fn(): bool => false),
+        ]);
+        $machine = new Machine($definition);
+
+        self::assertInstanceOf(GuardRejectedException::class, $machine->tryTransition('TURN_ON')->failure);
+        self::assertInstanceOf(TransitionNotAllowedException::class, $machine->tryTransition('STOP')->failure);
+        self::assertInstanceOf(UnknownEventException::class, $machine->tryTransition('NOPE')->failure);
+
+        $result = $machine->tryTransition('PLAY');
+        self::assertTrue($result->ok());
+        self::assertSame('playing', $result->state);
+    }
+
+    public function testTryTransitionStillThrowsForHookFailures(): void
+    {
+        $definition = $this->video(extra: [
+            Transition::on('BOOM', 'stopped', 'playing')->withBefore(static fn() => throw new \RuntimeException('hook')),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+
+        new Machine($definition)->tryTransition('BOOM');
+    }
+
     public function testStoreWithoutStateIsRejected(): void
     {
         $this->expectException(UnknownStateException::class);

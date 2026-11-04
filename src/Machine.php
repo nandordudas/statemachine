@@ -36,12 +36,16 @@ final class Machine implements StateMachine
     /** True while `before`/`onExit` hooks run; a nested send() then could only race with this one. */
     private bool $inPreHooks = false;
 
+    /** @var list<TransitionContext> */
+    private array $history = [];
+
     /**
      * @throws UnknownStateException when the store holds a state the definition doesn't know
      */
     public function __construct(
         public readonly Definition $definition,
         ?StateStore $store = null,
+        private readonly bool $recordHistory = false,
     ) {
         $this->store = $store ?? new InMemoryStore($definition->initial);
 
@@ -73,7 +77,65 @@ final class Machine implements StateMachine
     public function send(string|BackedEnum $event, array $payload = []): static
     {
         $event = Name::of($event);
+        $from = $this->guardState($event);
+        $transition = $this->plan($event, $from, $payload);
 
+        if ($transition instanceof Exception) {
+            throw $transition;
+        }
+
+        $this->apply($transition, $event, $from, $payload);
+
+        return $this;
+    }
+
+    public function sendAll(iterable $events): static
+    {
+        foreach ($events as $item) {
+            [$event, $payload] = is_array($item) ? [$item[0], $item[1] ?? []] : [$item, []];
+
+            $this->send($event, $payload);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Transitions applied so far, oldest first. Only recorded when the machine was created with
+     * `recordHistory: true` (it grows without bound, so it is opt-in).
+     *
+     * @return list<TransitionContext>
+     */
+    public function history(): array
+    {
+        return $this->history;
+    }
+
+    public function sendIfAllowed(string|BackedEnum $event, array $payload = []): bool
+    {
+        return $this->tryTransition($event, $payload)->ok();
+    }
+
+    public function tryTransition(string|BackedEnum $event, array $payload = []): TransitionResult
+    {
+        $event = Name::of($event);
+        $from = $this->guardState($event);
+        $transition = $this->plan($event, $from, $payload);
+
+        if ($transition instanceof Exception) {
+            return TransitionResult::refused($from, $transition);
+        }
+
+        $this->apply($transition, $event, $from, $payload);
+
+        return TransitionResult::succeeded($this->state);
+    }
+
+    /**
+     * Preconditions that are programming errors rather than refusals, so they always throw.
+     */
+    private function guardState(string $event): string
+    {
         if ($this->inPreHooks) {
             throw ConcurrentTransitionException::nestedSend($event);
         }
@@ -84,21 +146,38 @@ final class Machine implements StateMachine
             throw UnknownStateException::named($from);
         }
 
+        return $from;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return Transition|(UnknownEventException|TransitionNotAllowedException) the refusal, not thrown
+     */
+    private function plan(string $event, string $from, array $payload): Transition|UnknownEventException|TransitionNotAllowedException
+    {
         if (!$this->definition->hasEvent($event)) {
-            throw UnknownEventException::named($event);
+            return UnknownEventException::named($event);
         }
 
         $transition = $this->select($event, $from, $payload);
 
-        if ($transition === null) {
-            throw array_any(
-                $this->definition->transitionsFor($event),
-                static fn(Transition $t): bool => $t->leavesFrom($from),
-            )
-                ? GuardRejectedException::forEvent($event, $from)
-                : TransitionNotAllowedException::fromState($event, $from);
+        if ($transition !== null) {
+            return $transition;
         }
 
+        return array_any(
+            $this->definition->transitionsFor($event),
+            static fn(Transition $t): bool => $t->leavesFrom($from),
+        )
+            ? GuardRejectedException::forEvent($event, $from)
+            : TransitionNotAllowedException::fromState($event, $from);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function apply(Transition $transition, string $event, string $from, array $payload): void
+    {
         $context = $transition->contextFor($from, $payload);
 
         $this->inPreHooks = true;
@@ -118,6 +197,10 @@ final class Machine implements StateMachine
 
         $this->write($event, $from, $transition->to);
 
+        if ($this->recordHistory) {
+            $this->history[] = $context;
+        }
+
         try {
             foreach ([...$this->definition->enterHooksFor($transition->to), ...$transition->after] as $hook) {
                 $hook->handle($context);
@@ -125,8 +208,6 @@ final class Machine implements StateMachine
         } catch (Exception $e) { // Errors are bugs, not hook failures: let them propagate
             throw new AfterHookFailedException($context, $e);
         }
-
-        return $this;
     }
 
     private function write(string $event, string $from, string $to): void

@@ -124,9 +124,69 @@ final readonly class Definition
         return $normalized;
     }
 
+    /**
+     * Guard-less definition from a plain table of `[event, from, to]` rows; states are inferred.
+     * `from` may be a list of states. Use the builder when you need guards or hooks.
+     *
+     *     Definition::fromTable(S::Draft, [
+     *         [E::Submit, S::Draft, S::Review],
+     *         [E::Approve, S::Review, S::Published],
+     *     ]);
+     *
+     * @param list<array{string|BackedEnum, string|BackedEnum|list<string|BackedEnum>, string|BackedEnum}> $rows
+     */
+    public static function fromTable(string|BackedEnum $initial, array $rows): self
+    {
+        $states = [$initial];
+        $transitions = [];
+
+        foreach ($rows as [$event, $from, $to]) {
+            $transition = Transition::on($event, $from, $to);
+            $transitions[] = $transition;
+            array_push($states, ...$transition->from, ...[$transition->to]);
+        }
+
+        return new self($initial, $states, $transitions);
+    }
+
     public static function builder(): DefinitionBuilder
     {
         return new DefinitionBuilder();
+    }
+
+    public function toMermaid(): string
+    {
+        return Diagram::mermaid($this);
+    }
+
+    public function toDot(): string
+    {
+        return Diagram::dot($this);
+    }
+
+    /**
+     * Declared states no sequence of events can reach from the initial state (guards are ignored:
+     * this finds structural dead ends, e.g. a forgotten transition).
+     *
+     * @return list<string>
+     */
+    public function unreachableStates(): array
+    {
+        $reached = [$this->initial => true];
+        $queue = [$this->initial];
+
+        while ($queue !== []) {
+            $state = array_shift($queue);
+
+            foreach ($this->transitions as $transition) {
+                if ($transition->leavesFrom($state) && !isset($reached[$transition->to])) {
+                    $reached[$transition->to] = true;
+                    $queue[] = $transition->to;
+                }
+            }
+        }
+
+        return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
 
     public function hasState(string $state): bool

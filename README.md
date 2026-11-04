@@ -25,6 +25,48 @@ $video->availableEvents(); // ['PAUSE', 'STOP']
 $video->can('PLAY');       // false
 ```
 
+## Shorthand helpers
+
+```php
+use function Dudas\StateMachine\{machine, on};
+
+$doc = machine(
+    initial: S::Draft,
+    states: S::class,                                  // an enum class lists all its cases
+    transitions: [
+        on(E::Submit, S::Draft, S::Review),
+        on(E::Approve, S::Review, S::Published, guard: new ApproverGuard(), after: $audit),
+    ],
+    onEnter: [S::Published->value => $notify],
+);
+
+$doc->sendIfAllowed(E::Approve, $payload);             // bool, never throws for a refusal
+$result = $doc->tryTransition(E::Approve, $payload);   // ->ok(), ->failure (why), ->state
+```
+
+`Definition::fromTable($initial, [[E::Submit, S::Draft, S::Review], ...])` builds a guard-less definition
+from plain rows. `sendIfAllowed`/`tryTransition` only absorb refusals (unknown event, not allowed, guard veto);
+hook and concurrency failures still throw.
+
+### More sugar
+
+```php
+use function Dudas\StateMachine\{allOf, not, payloadIs, payloadsEqual, machineFor};
+
+// guards as values: no one-off class for simple rules
+on(E::Approve, S::Review, S::Published,
+    guard: allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author'))));
+
+$flow = machineFor($definition, $document);       // state lives in $document->status (string or enum typed)
+$flow->sendAll([E::Submit, [E::Approve, $payload]]);
+
+$definition->toMermaid();                         // stateDiagram-v2 text; toDot() for Graphviz
+$definition->unreachableStates();                 // lint: states nothing can reach
+machine(..., history: true)->history();           // opt-in log of applied transitions
+```
+
+`anyOf()` is the OR counterpart of `allOf()`. History grows without bound, so it is off by default.
+
 ## Design
 
 - `Definition` is an immutable, validated blueprint (shareable); `Machine` is the runtime instance.
@@ -39,7 +81,7 @@ $video->can('PLAY');       // false
 
 - `examples/OrderStatus`: a 31-status matrix checked against legacy rules.
 - `examples/Payment`: conditional branching on a gateway answer, an amount guard, an enter hook, an atomic store.
-- `examples/Document`: approval workflow over an entity via `CallbackStore`, role guards, enter/exit hooks.
+- `examples/Document`: approval workflow over an entity holding a status enum via `CallbackStore`, a named `ApproverGuard`, enter/exit hooks.
 
 ## Semantics
 
