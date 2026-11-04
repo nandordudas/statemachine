@@ -36,7 +36,7 @@ final class Name
             return [self::of($values)];
         }
 
-        return array_values(array_unique(array_map(self::of(...), [...$values])));
+        return array_values(array_unique(array_map(self::of(...), is_array($values) ? $values : iterator_to_array($values, false))));
     }
 
     private function __construct() {}
