@@ -54,4 +54,5 @@ library errors. Pass data via the payload array, read in guards/hooks through `T
 
 ## PHP 7.2 projects
 
-Use the `php72` branch (`nandordudas/state-machine-php72`): same API with plain-string states and no named arguments.
+The `1.x` line of the same package (branch `php72`) supports PHP 7.2 to 8.4 with plain-string states and no named
+arguments. `composer require nandordudas/state-machine` picks the right line automatically; pin `^1.0` to force it.
