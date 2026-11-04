@@ -235,6 +235,25 @@ final class RunToCompletionTest extends TestCase
         self::assertSame(['b', 'c'], $from);
     }
 
+    public function testBoundedHistoryKeepsOrderAcrossManyWrapArounds(): void
+    {
+        $machine = new Machine(Definition::fromTable('s0', [
+            ['GO', 's0', 's1'],
+            ['GO', 's1', 's2'],
+            ['GO', 's2', 's3'],
+            ['GO', 's3', 's4'],
+            ['GO', 's4', 's0'],
+        ]), recordHistory: 3);
+
+        for ($i = 0; $i < 13; $i++) {
+            $machine->send('GO');
+        }
+
+        // Transitions 11, 12 and 13 left s0, s1 and s2.
+        $from = array_map(static fn(TransitionContext $c): string => $c->from, $machine->history());
+        self::assertSame(['s0', 's1', 's2'], $from);
+    }
+
     public function testNegativeLimitsAreRejected(): void
     {
         $this->expectException(InvalidDefinitionException::class);
