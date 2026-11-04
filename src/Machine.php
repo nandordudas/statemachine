@@ -324,8 +324,8 @@ final class Machine implements StateMachine
 
         try {
             $refusal = $this->store instanceof TransactionalStateStore
-                ? $this->store->transaction(fn(): ?Refusal => $this->prepare($event, $payload))
-                : $this->prepare($event, $payload);
+                ? $this->store->transaction(fn(): ?Refusal => $this->prepare($event, $payload, $attempt))
+                : $this->prepare($event, $payload, $attempt);
         } catch (Throwable $e) {
             if ($attempt->transition !== null && $attempt->context !== null) {
                 foreach ($attempt->transition->abort as $hook) {
@@ -382,12 +382,12 @@ final class Machine implements StateMachine
 
     /**
      * Selects the transition, runs `before`/`onExit` hooks and writes the new state, recording progress
-     * in the attempt so a failure can be compensated.
+     * in `$attempt` so a failure can be compensated.
      *
      * @param array<string, mixed> $payload
      * @return Refusal|null why the event was refused, or null once the new state is written
      */
-    private function prepare(string $event, array $payload): ?Refusal
+    private function prepare(string $event, array $payload, Attempt $attempt): ?Refusal
     {
         $this->phase = self::SELECTING;
         $from = $this->store->get();
@@ -414,8 +414,8 @@ final class Machine implements StateMachine
 
         $this->phase = self::PREPARING;
         $context = $transition->contextFor($from, $payload);
-        $this->attempt->transition = $transition;
-        $this->attempt->context = $context;
+        $attempt->transition = $transition;
+        $attempt->context = $context;
 
         foreach ($transition->before as $hook) {
             $hook->handle($context);
@@ -453,7 +453,7 @@ final class Machine implements StateMachine
             return false;
         }
 
-        // Built here, only when someone gets to see it.
+        // Built here, only when someone gets to see it: a refused sendIfAllowed() never pays for a stack trace.
         $exception = match ($refusal->reason) {
             Refusal::UNKNOWN_EVENT => UnknownEventException::named($refusal->event),
             Refusal::GUARD_REJECTED => GuardRejectedException::forEvent($refusal->event, $refusal->from),
