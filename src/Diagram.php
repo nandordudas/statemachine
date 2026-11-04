@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Dudas\StateMachine;
 
 /**
- * Renders a {@see Definition} as text diagrams. Guarded transitions are marked with `[guard]`.
+ * Renders a {@see Definition} as text diagrams. Guarded transitions are marked with `[guard]`; a `label` in the
+ * metadata of a state or transition is shown instead of its name (an edge keeps the event next to its label).
  */
 final class Diagram
 {
@@ -14,8 +15,10 @@ final class Diagram
         $lines = ['stateDiagram-v2'];
 
         foreach ($definition->states as $state) {
-            if (self::id($state) !== $state) {
-                $lines[] = sprintf('    state "%s" as %s', $state, self::id($state));
+            $name = self::stateLabel($definition, $state);
+
+            if (self::id($state) !== $state || $name !== $state) {
+                $lines[] = sprintf('    state "%s" as %s', str_replace('"', "'", $name), self::id($state));
             }
         }
 
@@ -40,10 +43,12 @@ final class Diagram
         $lines = ['digraph machine {', '    rankdir=LR;', '    start [shape=point];'];
 
         foreach ($definition->states as $state) {
+            $name = self::stateLabel($definition, $state);
             $lines[] = sprintf(
-                '    "%s" [shape=%s];',
+                '    "%s" [shape=%s%s];',
                 addcslashes($state, '"\\'),
                 $state === $definition->initial ? 'doublecircle' : 'circle',
+                $name === $state ? '' : sprintf(', label="%s"', addcslashes($name, '"\\')),
             );
         }
 
@@ -67,7 +72,19 @@ final class Diagram
 
     private static function label(Transition $transition): string
     {
-        return $transition->event . ($transition->guards === [] ? '' : ' [guard]');
+        $label = $transition->meta['label'] ?? null;
+        $name = is_string($label) && $label !== ''
+            ? sprintf('%s (%s)', $label, $transition->event)
+            : $transition->event;
+
+        return $name . ($transition->guards === [] ? '' : ' [guard]');
+    }
+
+    private static function stateLabel(Definition $definition, string $state): string
+    {
+        $label = $definition->metaFor($state)['label'] ?? null;
+
+        return is_string($label) && $label !== '' ? $label : $state;
     }
 
     private static function id(string $state): string

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine;
 
+use Dudas\StateMachine\Exception\GuardRejectedException;
 use Dudas\StateMachine\Exception\StateMachineException;
+use Dudas\StateMachine\Exception\UnknownEventException;
 use Throwable;
 
 /**
@@ -47,5 +49,22 @@ final readonly class TransitionResult
     public function ok(): bool
     {
         return $this->failure === null;
+    }
+
+    /**
+     * Why the event was refused, as reasons to show; empty when it was not.
+     *
+     * @return list<Blocker>
+     */
+    public function blockers(): array
+    {
+        return match (true) {
+            $this->failure === null => [],
+            $this->failure instanceof GuardRejectedException => $this->failure->blockers(),
+            $this->failure instanceof UnknownEventException => [
+                new Blocker(Blocker::UNKNOWN_EVENT, $this->failure->getMessage()),
+            ],
+            default => [new Blocker(Blocker::NOT_ALLOWED, $this->failure->getMessage())],
+        };
     }
 }

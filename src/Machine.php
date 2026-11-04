@@ -142,6 +142,72 @@ final class Machine implements StateMachine
         return $available;
     }
 
+    /**
+     * Like {@see availableEvents()}, but the transitions themselves (the first permitted one per event), so a UI
+     * can read their `meta` (labels, styles) to render buttons.
+     *
+     * @param array<string, mixed> $payload
+     * @return list<Transition>
+     */
+    public function availableTransitions(array $payload = []): array
+    {
+        $from = $this->state;
+        $available = [];
+
+        foreach ($this->definition->eventsFrom($from) as $event) {
+            $transition = $this->select($event, $from, $payload);
+
+            if ($transition !== null) {
+                $available[] = $transition;
+            }
+        }
+
+        return $available;
+    }
+
+    /**
+     * Why `$event` cannot be sent right now; empty when it can. Unlike {@see can()} it asks every guard, so each
+     * reason is listed. Messages come from {@see because()} or a {@see Contracts\ExplainingGuard}; a guard that
+     * gives none gets the transition's `meta['blocked']` message.
+     *
+     *     foreach ($order->blockers(E::Ship, $payload) as $blocker) {
+     *         $flash->warning($blocker->message);
+     *     }
+     *
+     * @param array<string, mixed> $payload
+     * @return list<Blocker>
+     */
+    public function blockers(string|BackedEnum $event, array $payload = []): array
+    {
+        $event = Name::of($event);
+        $from = $this->state;
+
+        if (!$this->definition->hasEvent($event)) {
+            return [new Blocker(Blocker::UNKNOWN_EVENT, sprintf('Event "%s" is not defined.', $event), [
+                'event' => $event,
+            ])];
+        }
+
+        if ($this->definition->transitionsFrom($from, $event) === []) {
+            return [new Blocker(
+                Blocker::NOT_ALLOWED,
+                sprintf('Event "%s" cannot be handled in state "%s".', $event, $from),
+                ['event' => $event, 'from' => $from],
+            )];
+        }
+
+        $caller = self::caller();
+        $this->evaluating[$caller] = ($this->evaluating[$caller] ?? 0) + 1;
+
+        try {
+            return $this->guardBlockers($event, $from, $payload);
+        } finally {
+            if (--$this->evaluating[$caller] === 0) {
+                unset($this->evaluating[$caller]);
+            }
+        }
+    }
+
     public function send(string|BackedEnum $event, array $payload = []): static
     {
         $this->dispatch(Name::of($event), $payload, self::THROW);
@@ -279,7 +345,7 @@ final class Machine implements StateMachine
             }
 
             if ($outcome instanceof Refusal) {
-                return self::refuse($outcome, $mode);
+                return $this->refuse($outcome, $mode);
             }
 
             return $mode === self::RESULT ? TransitionResult::succeeded($outcome->to, $outcome) : true;
@@ -305,7 +371,7 @@ final class Machine implements StateMachine
             $outcome = $this->step($event, $payload);
 
             if ($outcome instanceof Refusal) {
-                self::refuse($outcome, $mode); // throws for a queued send(); otherwise the refusal is dropped
+                $this->refuse($outcome, $mode); // throws for a queued send(); otherwise the refusal is dropped
             }
         }
     }
@@ -407,6 +473,7 @@ final class Machine implements StateMachine
                 $this->definition->transitionsFrom($from, $event) === []
                     ? Refusal::NOT_ALLOWED
                     : Refusal::GUARD_REJECTED,
+                $payload,
             );
         }
 
@@ -445,7 +512,7 @@ final class Machine implements StateMachine
     /**
      * @param self::THROW|self::RESULT|self::QUIET $mode
      */
-    private static function refuse(Refusal $refusal, int $mode): TransitionResult|false
+    private function refuse(Refusal $refusal, int $mode): TransitionResult|false
     {
         if ($mode === self::QUIET) {
             return false;
@@ -454,7 +521,11 @@ final class Machine implements StateMachine
         // Built here, only when someone gets to see it: a refused sendIfAllowed() never pays for a stack trace.
         $exception = match ($refusal->reason) {
             Refusal::UNKNOWN_EVENT => UnknownEventException::named($refusal->event),
-            Refusal::GUARD_REJECTED => GuardRejectedException::forEvent($refusal->event, $refusal->from),
+            Refusal::GUARD_REJECTED => GuardRejectedException::forEvent(
+                $refusal->event,
+                $refusal->from,
+                $this->guardBlockers($refusal->event, $refusal->from, $refusal->payload),
+            ),
             Refusal::NOT_ALLOWED => TransitionNotAllowedException::fromState($refusal->event, $refusal->from),
         };
 
@@ -495,6 +566,31 @@ final class Machine implements StateMachine
                 unset($this->evaluating[$caller]);
             }
         }
+    }
+
+    /**
+     * Reasons of every candidate transition's guards, without duplicates; empty when one of them is permitted.
+     *
+     * @param array<string, mixed> $payload
+     * @return list<Blocker>
+     */
+    private function guardBlockers(string $event, string $from, array $payload): array
+    {
+        $blockers = [];
+
+        foreach ($this->definition->transitionsFrom($from, $event) as $transition) {
+            $reasons = $transition->blockers($from, $payload);
+
+            if ($reasons === []) {
+                return [];
+            }
+
+            foreach ($reasons as $blocker) {
+                $blockers[$blocker->code . "\0" . $blocker->message] = $blocker;
+            }
+        }
+
+        return array_values($blockers);
     }
 
     /**

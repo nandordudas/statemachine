@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Tests\Examples;
 
+use Dudas\StateMachine\Blocker;
 use Dudas\StateMachine\Examples\Document\Document;
 use Dudas\StateMachine\Examples\Document\DocumentEvent;
 use Dudas\StateMachine\Examples\Document\DocumentFlow;
@@ -13,6 +14,7 @@ use Dudas\StateMachine\Examples\Payment\PaymentFlow;
 use Dudas\StateMachine\Examples\Payment\PaymentState as S;
 use Dudas\StateMachine\Exception\GuardRejectedException;
 use Dudas\StateMachine\Store\AtomicCallbackStore;
+use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
@@ -103,6 +105,18 @@ final class RealWorldExamplesTest extends TestCase
             $flow->can(DocumentEvent::Approve, ['role' => 'approver', 'author' => 'ann']),
             'an anonymous actor is not an approver',
         );
+
+        $why = $flow->blockers(DocumentEvent::Approve, ['role' => 'editor', 'actor' => 'ann', 'author' => 'ann']);
+        self::assertSame(
+            ['Only approvers can review documents.', 'Authors cannot review their own documents.'],
+            array_map(static fn(Blocker $blocker): string => $blocker->message, $why),
+            'the guard says which rules fail',
+        );
+        self::assertSame(['Approve', 'Send back'], array_map(
+            static fn(Transition $transition): mixed => $transition->meta['label'] ?? null,
+            $flow->availableTransitions(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
+        ));
+        self::assertSame('In review', $flow->definition->metaFor(DocumentState::Review)['label'] ?? null);
 
         $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
 
