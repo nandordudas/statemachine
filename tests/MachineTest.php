@@ -215,15 +215,16 @@ final class MachineTest extends VideoTestCase
 
     public function testNestedSendFromBeforeHookIsRejected(): void
     {
-        /** @var Machine|null $machine */
-        $machine = null;
+        /** @var \stdClass&object{machine: Machine} $holder */
+        $holder = new \stdClass();
         $definition = $this->video(extra: [
             Transition::on('FORCE_PAUSE', 'stopped', 'paused'),
-            Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use (&$machine): void {
-                $machine->send('FORCE_PAUSE');
+            Transition::on('GO', 'stopped', 'playing')->withBefore(static function () use ($holder): void {
+                $holder->machine->send('FORCE_PAUSE');
             }),
         ]);
         $machine = new Machine($definition);
+        $holder->machine = $machine;
 
         try {
             $machine->send('GO');
@@ -358,6 +359,7 @@ final class MachineTest extends VideoTestCase
 
     public function testEnterHooksMayChainAnotherEvent(): void
     {
+        /** @var \stdClass&object{machine: Machine} $holder */
         $holder = new \stdClass();
         $definition = Definition::builder()
             ->initial('a')
