@@ -40,9 +40,9 @@ final readonly class Definition
     /**
      * @param string|BackedEnum $initial
      * @param list<string|BackedEnum> $states
-     * @param list<Transition> $transitions
-     * @param array<string, list<Hook>> $onEnter hooks by state name
-     * @param array<string, list<Hook>> $onExit hooks by state name
+     * @param array<mixed> $transitions every element must be a {@see Transition}
+     * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onEnter hooks by state name
+     * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onExit hooks by state name
      */
     public function __construct(
         string|BackedEnum $initial,
@@ -66,7 +66,7 @@ final readonly class Definition
             throw new InvalidDefinitionException(sprintf('Initial state "%s" is not a declared state.', $initial));
         }
 
-        $transitions = array_values($transitions);
+        $checked = [];
 
         foreach ($transitions as $transition) {
             if (!$transition instanceof Transition) {
@@ -85,6 +85,8 @@ final readonly class Definition
                     ));
                 }
             }
+
+            $checked[] = $transition;
         }
 
         foreach (['onEnter' => $onEnter, 'onExit' => $onExit] as $kind => $byState) {
@@ -103,11 +105,11 @@ final readonly class Definition
         $this->onExit = self::normalizeHooks($onExit);
         $this->initial = $initial;
         $this->states = $known;
-        $this->transitions = $transitions;
+        $this->transitions = $checked;
 
         $byEvent = [];
         $names = [];
-        foreach ($transitions as $transition) {
+        foreach ($checked as $transition) {
             $byEvent[$transition->event][] = $transition;
             $names[$transition->event] = true;
         }
@@ -116,7 +118,7 @@ final readonly class Definition
     }
 
     /**
-     * @param array<string, iterable<Hook|callable>> $byState
+     * @param array<string, mixed> $byState
      * @return array<string, list<Hook>>
      */
     private static function normalizeHooks(array $byState): array
@@ -129,6 +131,13 @@ final readonly class Definition
             }
 
             foreach ($hooks as $hook) {
+                if (!$hook instanceof Hook && !is_callable($hook)) {
+                    throw new InvalidDefinitionException(sprintf(
+                        'A hook for state "%s" must be a Hook or a callable.',
+                        $state,
+                    ));
+                }
+
                 $normalized[(string) $state][] = ClosureHook::wrap($hook);
             }
         }
@@ -145,7 +154,7 @@ final readonly class Definition
      *         [E::Approve, S::Review, S::Published],
      *     ]);
      *
-     * @param list<array{string|BackedEnum, string|BackedEnum|list<string|BackedEnum>, string|BackedEnum}> $rows
+     * @param list<array{string|BackedEnum, string|BackedEnum|non-empty-list<string|BackedEnum>, string|BackedEnum}> $rows
      */
     public static function fromTable(string|BackedEnum $initial, array $rows): self
     {
