@@ -230,7 +230,11 @@ final class Machine implements StateMachine
             throw ConcurrentTransitionException::forEvent($event, $from, $this->state());
         }
 
-        $this->write($event, $from, $transition->to);
+        // A self-loop changes nothing, so there is nothing to write (and an `UPDATE ... SET s = :s WHERE s = :s`
+        // reports zero affected rows on MySQL, which a compare-and-set would mistake for a lost race).
+        if ($from !== $transition->to) {
+            $this->write($event, $from, $transition->to);
+        }
 
         if ($this->recordHistory) {
             $this->history[] = $context;
