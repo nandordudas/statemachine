@@ -22,6 +22,21 @@ jobs:
   package:
     name: ${{ matrix.package }} (PHP ${{ matrix.php }})
     runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    services:
+      # Real database for tests/Integration (the 1.x job ignores it; SQLite needs no service).
+      mysql:
+        image: mysql:9
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: state_machine
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     strategy:
       fail-fast: false
       matrix:
@@ -29,33 +44,41 @@ jobs:
           - package: state-machine-2.x
             ref: main
             php: '8.5'
+            db: true
           - package: state-machine-1.x
             ref: php72
             php: '7.2'
     steps:
       # The line this run is about (push to it, or a pull request into it) tests the triggering commit;
       # the other line is checked out from its branch so both packages stay verified.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ ((github.base_ref || github.ref_name) == 'php72') != (matrix.ref == 'php72') && matrix.ref || '' }}
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, pdo_sqlite
           coverage: none
           tools: composer:v2
 
+      # Pinned release, verified against its published SHA-256, so a changed or compromised binary (or new
+      # lint rules) cannot alter what CI runs. Bump MAGO_VERSION and MAGO_SHA256 together.
       - name: Install Mago
         env:
           GH_TOKEN: ${{ github.token }}
+          MAGO_VERSION: 1.59.0
+          MAGO_SHA256: c536aa948ff1dbcd4f12200088a01f61ca0ea426e92128255b657a797645ec00
         run: |
-          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output "$RUNNER_TEMP/mago.tar.gz"
+          gh release download "$MAGO_VERSION" --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output "$RUNNER_TEMP/mago.tar.gz"
+          echo "$MAGO_SHA256  $RUNNER_TEMP/mago.tar.gz" | sha256sum --check --strict
           mkdir -p "$HOME/.local/bin"
           tar -xzf "$RUNNER_TEMP/mago.tar.gz" -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: composer audit
 
       # Each check runs even when an earlier one failed (the job still fails), so one run reports every problem.
       - run: mago --version
@@ -70,6 +93,15 @@ jobs:
         run: composer analyse
       - if: ${{ !cancelled() }}
         run: composer test
+
+      # The same tests again on MySQL: row locks, affected-rows semantics and real transactions.
+      - name: composer test (MySQL)
+        if: ${{ !cancelled() && matrix.db }}
+        env:
+          DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=state_machine
+          DB_USER: root
+          DB_PASS: root
+        run: vendor/bin/phpunit tests/Integration
 
       # Informational: on a pull request the base branch is measured on the same runner, so the figures compare.
       - name: Benchmark (informational)
@@ -91,7 +123,7 @@ jobs:
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.package }}
           path: dist/${{ matrix.package }}.zip
