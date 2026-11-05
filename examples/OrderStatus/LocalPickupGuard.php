@@ -9,7 +9,7 @@ use Dudas\StateMachine\Examples\OrderStatus\OrderStatus as S;
 use Dudas\StateMachine\TransitionContext;
 
 /**
- * The local pickup rules of OrderModel::validateStatusTransition().
+ * The local pickup rules of the legacy status validator.
  * Reads `localPickup` (bool) from the event payload.
  */
 final readonly class LocalPickupGuard implements Guard

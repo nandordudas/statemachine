@@ -6,8 +6,8 @@ namespace Dudas\StateMachine\Tests\Examples;
 
 /**
  * Oracle: a line-for-line port of the legacy system's current behaviour, i.e.
- * StatusObserverService::validateGroupChange() followed by the local pickup checks of
- * OrderModel::validateStatusTransition(), working on raw status keys and group strings.
+ * the legacy group-movement validation followed by its local pickup checks,
+ * working on raw status keys and group strings.
  * Deliberately shares no code with the machine under test.
  */
 final class LegacyOrderStatusRule
