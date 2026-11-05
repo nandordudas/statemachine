@@ -43,5 +43,41 @@ final class Name
         return array_values(array_unique(array_map([self::class, 'of'], $values)));
     }
 
+    /**
+     * The values of the public string constants of `$class`, in declaration order: the PHP 7.2 stand-in for an
+     * enum's cases. `machine(VideoState::STOPPED, VideoState::class, ...)` uses it to list every state.
+     *
+     *     final class VideoState
+     *     {
+     *         const STOPPED = 'stopped';
+     *         const PLAYING = 'playing';
+     *     }
+     *
+     * @return string[]
+     * @throws InvalidDefinitionException when the class does not exist or has no public string constant
+     */
+    public static function constantsOf(string $class): array
+    {
+        if (!class_exists($class) && !interface_exists($class)) {
+            throw new InvalidDefinitionException(sprintf('Class "%s" does not exist.', $class));
+        }
+
+        $names = [];
+
+        foreach ((new \ReflectionClass($class))->getReflectionConstants() as $constant) {
+            $value = $constant->getValue();
+
+            if ($constant->isPublic() && is_string($value)) {
+                $names[] = $value;
+            }
+        }
+
+        if ($names === []) {
+            throw new InvalidDefinitionException(sprintf('%s has no public string constants to use as names.', $class));
+        }
+
+        return array_values(array_unique($names));
+    }
+
     private function __construct() {}
 }

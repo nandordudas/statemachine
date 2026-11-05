@@ -16,24 +16,27 @@ something because it happened). Draw it: `$definition->toMermaid()`.
 
 ## 2. Build
 
-States/events are strings; keep them as class constants.
+States/events are strings; name them with class constants (one class for states, one for events), never
+string literals.
 
 ```php
 final class DocState { const DRAFT = 'draft'; const REVIEW = 'review'; const PUBLISHED = 'published'; }
+final class DocEvent { const SUBMIT = 'SUBMIT'; const APPROVE = 'APPROVE'; }
 
 $definition = Definition::builder()
     ->initial(DocState::DRAFT)
-    ->states(DocState::DRAFT, DocState::REVIEW, DocState::PUBLISHED)
+    ->states(...Name::constantsOf(DocState::class))   // every state, read once from the class
     ->onEnter(DocState::PUBLISHED, $notify)          // after the state is stored
     ->onExit(DocState::REVIEW, $clearReviewer)       // before leaving; throwing aborts
     ->transition(
-        Transition::on('SUBMIT', DocState::DRAFT, DocState::REVIEW),
-        Transition::on('APPROVE', DocState::REVIEW, DocState::PUBLISHED)->withGuard($isApprover)
+        Transition::on(DocEvent::SUBMIT, DocState::DRAFT, DocState::REVIEW),
+        Transition::on(DocEvent::APPROVE, DocState::REVIEW, DocState::PUBLISHED)->withGuard($isApprover)
     )
     ->build();
 ```
 
-Shorthand: `machine($initial, $states, [on(...)], ['state' => $hook])`; guard-less: `Definition::fromTable()`.
+Shorthand: `machine(DocState::DRAFT, DocState::class, [on(...)], [DocState::PUBLISHED => $hook])`; guard-less:
+`Definition::fromTable()`.
 Several transitions with the same event and source = conditional branching; **first permitted wins**, so put the
 guarded one first.
 

@@ -17,7 +17,7 @@ use Dudas\StateMachine\Store\PropertyStore;
 /**
  * Shorthand for {@see Transition}: one call instead of `Transition::on()->withGuard()->withAfter()`.
  *
- *     on('APPROVE', 'review', 'published', new ApproverGuard(), [], $audit)
+ *     on(DocEvent::APPROVE, DocState::REVIEW, DocState::PUBLISHED, new ApproverGuard(), [], $audit)
  *
  * `$guard`, `$before` and `$after` take a single guard/hook/callable or a list of them.
  *
@@ -34,16 +34,21 @@ function on(string $event, $from, string $to, $guard = [], $before = [], $after 
 /**
  * Builds a ready-to-use {@see Machine} in one call.
  *
- *     $video = machine('stopped', ['playing', 'stopped'], [on('PLAY', 'stopped', 'playing')]);
+ *     $video = machine(VideoState::STOPPED, VideoState::class, [
+ *         on(VideoEvent::PLAY, VideoState::STOPPED, VideoState::PLAYING),
+ *     ]);
  *
- * @param string[] $states
+ * `$states` is a list of names, or a class whose public string constants name the states (see
+ * {@see Name::constantsOf()}), as an enum class does on the PHP 8.5 line.
+ *
+ * @param string|string[] $states
  * @param Transition[] $transitions
  * @param array<string, Hook|callable|array> $onEnter hooks by state name
  * @param array<string, Hook|callable|array> $onExit hooks by state name
  */
 function machine(
     string $initial,
-    array $states,
+    $states,
     array $transitions,
     array $onEnter = [],
     array $onExit = [],
@@ -53,7 +58,7 @@ function machine(
     return new Machine(
         new Definition(
             $initial,
-            $states,
+            is_string($states) ? Name::constantsOf($states) : $states,
             $transitions,
             array_map(__NAMESPACE__ . '\\listOf', $onEnter),
             array_map(__NAMESPACE__ . '\\listOf', $onExit)

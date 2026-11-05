@@ -37,7 +37,7 @@
         "check": ["@analyse", "@test"]
     },
     "archive": {
-        "exclude": ["/tests", "/.github", "/.vscode", "/.claude", "/.editorconfig", "/AGENTS.md", "/CLAUDE.md", "/mago.toml", "/phpstan.neon.dist", "/phpunit.xml.dist", "/.php-cs-fixer.dist.php", "/dist"]
+        "exclude": ["/vendor", "/tests", "/.archify", "/.github", "/.vscode", "/.claude", "/.editorconfig", "/AGENTS.md", "/CLAUDE.md", "/mago.toml", "/phpstan.neon.dist", "/phpunit.xml.dist", "/.php-cs-fixer.dist.php", "/dist"]
     },
     "config": {
         "sort-packages": true,

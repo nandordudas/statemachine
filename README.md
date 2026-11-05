@@ -37,48 +37,75 @@ For a private fork, add a VCS repository and give Composer a read-only token
 
 ## Quick start
 
+PHP 7.2 has no enums, so name states and events with class constants: one class each, and never a string
+literal in your own code.
+
 ```php
-use Dudas\StateMachine\{Definition, Machine, Transition, TransitionContext};
+namespace App;
+
+final class VideoState
+{
+    public const STOPPED = 'stopped';
+    public const PLAYING = 'playing';
+    public const PAUSED = 'paused';
+
+    private function __construct() {}
+}
+
+final class VideoEvent
+{
+    public const PLAY = 'PLAY';
+    public const PAUSE = 'PAUSE';
+    public const STOP = 'STOP';
+
+    private function __construct() {}
+}
+```
+
+```php
+use App\{VideoEvent as E, VideoState as S};
+use Dudas\StateMachine\{Definition, Machine, Name, Transition, TransitionContext};
 
 $definition = Definition::builder()
-    ->initial('stopped')
-    ->states('playing', 'stopped', 'paused')
+    ->initial(S::STOPPED)
+    ->states(...Name::constantsOf(S::class))          // every public string constant of the class
     ->transition(
-        Transition::on('PLAY', ['stopped', 'paused'], 'playing')
+        Transition::on(E::PLAY, [S::STOPPED, S::PAUSED], S::PLAYING)
             ->withGuard(function (TransitionContext $c) { return $c->payload['licensed'] ?? false; })
             ->withAfter(function (TransitionContext $c) use ($log) { $log->info("{$c->from} -> {$c->to}"); }),
-        Transition::on('PAUSE', 'playing', 'paused'),
-        Transition::on('STOP', 'playing', 'stopped')
+        Transition::on(E::PAUSE, S::PLAYING, S::PAUSED),
+        Transition::on(E::STOP, S::PLAYING, S::STOPPED)
     )
     ->build();
 
 $video = new Machine($definition);
-$video->send('PLAY', ['licensed' => true]);
-$video->state();           // 'playing'
-$video->availableEvents(); // ['PAUSE', 'STOP']
-$video->can('PLAY');       // false
+$video->send(E::PLAY, ['licensed' => true]);
+$video->state() === S::PLAYING;  // true
+$video->availableEvents();       // [E::PAUSE, E::STOP]
+$video->can(E::PLAY);            // false
 ```
 
 ## Shorthand helpers
 
 ```php
+use App\{DocEvent as E, DocState as S};
 use function Dudas\StateMachine\{machine, on, allOf, not, payloadIs, payloadsEqual, machineFor};
 
-$doc = machine('draft', ['draft', 'review', 'published'], [
-    on('SUBMIT', 'draft', 'review'),
-    on('APPROVE', 'review', 'published', allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
-], ['published' => $notify]);                          // onEnter hooks by state
+$doc = machine(S::DRAFT, S::class, [                   // a constants class lists every state
+    on(E::SUBMIT, S::DRAFT, S::REVIEW),
+    on(E::APPROVE, S::REVIEW, S::PUBLISHED, allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
+], [S::PUBLISHED => $notify]);                         // onEnter hooks by state: constants are valid array keys
 
-$doc->sendIfAllowed('APPROVE', $payload);              // bool, never throws for a refusal
-$result = $doc->tryTransition('APPROVE', $payload);    // ->ok(), ->failure (why), ->state
-$doc->sendAll(['SUBMIT', ['APPROVE', $payload]]);
+$doc->sendIfAllowed(E::APPROVE, $payload);             // bool, never throws for a refusal
+$result = $doc->tryTransition(E::APPROVE, $payload);   // ->ok(), ->failure (why), ->state
+$doc->sendAll([E::SUBMIT, [E::APPROVE, $payload]]);
 
 $flow = machineFor($definition, $entity, 'status');    // state lives in $entity->status (string)
 $definition->toMermaid();                              // stateDiagram-v2 text; toDot() for Graphviz
 $definition->unreachableStates();                      // lint: states nothing can reach
 ```
 
-`Definition::fromTable('draft', [['SUBMIT', 'draft', 'review'], ...])` builds a guard-less definition from rows.
+`Definition::fromTable(S::DRAFT, [[E::SUBMIT, S::DRAFT, S::REVIEW], ...])` builds a guard-less definition from rows.
 Machine history is opt-in: `new Machine($definition, $store, true)` then `->history()`.
 
 ## Common patterns
@@ -88,11 +115,11 @@ Machine history is opt-in: `new Machine($definition, $store, true)` then `->hist
 $flow = machineFor($definition, $order, 'status');
 
 // Try without exceptions
-$result = $flow->tryTransition('SHIP', $payload);   // ->ok(), ->failure, ->state
+$result = $flow->tryTransition(OrderEvent::SHIP, $payload);   // ->ok(), ->failure, ->state
 
 // Catch everything the library can throw
 try {
-    $flow->send('SHIP');
+    $flow->send(OrderEvent::SHIP);
 } catch (\Dudas\StateMachine\Exception\StateMachineException $e) {
     // handle
 }
@@ -101,8 +128,8 @@ file_put_contents('flow.mmd', $definition->toMermaid());   // draw it
 ```
 
 Guards (`withGuard`, `allOf`, ...) decide whether an event is allowed and must be side-effect free. Hooks
-(`before`, `onExit`, `onEnter`, `after`) do the work. Use class constants for state and event names to get
-some of the type safety enums would give.
+(`before`, `onExit`, `onEnter`, `after`) do the work. Name states and events with class constants (as above) to
+get some of the type safety enums give on the 2.x line; `Name::constantsOf()` lists them where 2.x lists enum cases.
 
 ## Semantics
 

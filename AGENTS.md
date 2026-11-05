@@ -13,7 +13,9 @@ A small finite state machine. A `Definition` (immutable blueprint: states, initi
 - Code must parse as PHP 7.2: no typed properties, arrow functions, union types, `mixed`, `static` return types,
   named arguments, `match`, enums, `readonly`, constructor promotion, `??=`, spread of string keys, `str_*` PHP 8 helpers.
 - States and events are **plain strings** (use class constants for type safety). Passing anything else throws
-  `InvalidDefinitionException`.
+  `InvalidDefinitionException`. Documentation names them with class constants (`S::DRAFT`), never string literals;
+  `Name::constantsOf(S::class)` (also `machine($initial, S::class, ...)`) lists a constants class, like an enum's
+  cases on `main`. Tests may use literals.
 - The current state is `$machine->state()` (also readable as `$machine->state`).
 - Public properties on value objects are `@readonly` by convention; never assign to them.
 - `declare(strict_types=1);` in every file. Add tests for every behaviour change.
@@ -21,16 +23,17 @@ A small finite state machine. A `Definition` (immutable blueprint: states, initi
 ## Using the library
 
 ```php
+use App\{DocEvent as E, DocState as S};   // final classes of string constants (no enums on PHP 7.2)
 use function Dudas\StateMachine\{machine, on, allOf, not, payloadIs, payloadsEqual};
 
-$doc = machine('draft', ['draft', 'review', 'published'], [
-    on('SUBMIT', 'draft', 'review'),
-    on('APPROVE', 'review', 'published', allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
-], ['published' => $notify]);        // onEnter hooks by state
+$doc = machine(S::DRAFT, S::class, [        // a constants class lists every state
+    on(E::SUBMIT, S::DRAFT, S::REVIEW),
+    on(E::APPROVE, S::REVIEW, S::PUBLISHED, allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
+], [S::PUBLISHED => $notify]);              // onEnter hooks by state
 
-$doc->send('SUBMIT');                // throws on refusal
-$doc->sendIfAllowed('APPROVE', $p);  // bool, never throws for a refusal
-$doc->tryTransition('APPROVE', $p);  // TransitionResult: ok(), failure, state
+$doc->send(E::SUBMIT);                      // throws on refusal
+$doc->sendIfAllowed(E::APPROVE, $p);        // bool, never throws for a refusal
+$doc->tryTransition(E::APPROVE, $p);        // TransitionResult: ok(), failure, state
 ```
 
 Pipeline of `send()`: select transition (guards, first permitted wins) → `before` hooks → `onExit` hooks → store write
