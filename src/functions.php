@@ -31,8 +31,7 @@ use Dudas\StateMachine\Store\PropertyStore;
  * @param Guard|callable(TransitionContext): bool|list<Guard|callable(TransitionContext): bool> $guard
  * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $before
  * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $after
- * @param Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed> $abort
- * @param array<string, mixed> $meta labels, required roles, the `blocked` message (see {@see Transition::$meta})
+ * @param array<string, mixed> $meta labels, required roles, anything a UI or hook needs (see {@see Transition::$meta})
  */
 function on(
     string|BackedEnum $event,
@@ -41,10 +40,9 @@ function on(
     Guard|callable|array $guard = [],
     Hook|callable|array $before = [],
     Hook|callable|array $after = [],
-    Hook|callable|array $abort = [],
     array $meta = [],
 ): Transition {
-    return new Transition($event, $from, $to, listOf($guard), listOf($before), listOf($after), listOf($abort), $meta);
+    return new Transition($event, $from, $to, listOf($guard), listOf($before), listOf($after), $meta);
 }
 
 /**
@@ -57,15 +55,15 @@ function on(
  *         onEnter: [[S::Playing, $log]],          // [state, hook(s)] pairs: no ->value needed
  *     );
  *
- * `onEnter`, `onExit` and `stateMeta` take `[state, value]` pairs, so a state can be an enum (PHP array keys
- * cannot be). A map keyed by state name (`['playing' => $log]`) still works. Pairs for the same state are merged.
+ * `onEnter` and `onExit` take `[state, hook(s)]` pairs, so a state can be an enum (PHP array keys cannot be).
+ * A map keyed by state name (`['playing' => $log]`) still works. Pairs for the same state are merged.
+ * For a chain limit other than 100, build the {@see Machine} directly.
  *
  * @param class-string<BackedEnum>|list<string|BackedEnum> $states
  * @param list<Transition> $transitions
  * @param array<array{BackedEnum, mixed}|mixed> $onEnter hooks by state: `[state, hook|list<hook>]` pairs or a map
  * @param array<array{BackedEnum, mixed}|mixed> $onExit hooks by state: `[state, hook|list<hook>]` pairs or a map
  * @param bool|int $history true records every transition, a positive int only the latest N
- * @param array<array{BackedEnum, mixed}|mixed> $stateMeta metadata by state: `[state, array]` pairs or a map
  */
 function machine(
     string|BackedEnum $initial,
@@ -75,8 +73,6 @@ function machine(
     array $onExit = [],
     ?StateStore $store = null,
     bool|int $history = false,
-    int $maxChainedEvents = 100,
-    array $stateMeta = [],
 ): Machine {
     if (is_string($states)) {
         if (!enum_exists($states) || !is_subclass_of($states, BackedEnum::class)) {
@@ -96,11 +92,9 @@ function machine(
             $transitions,
             hooksByState($onEnter),
             hooksByState($onExit),
-            metaByState($stateMeta),
         ),
         $store,
         $history,
-        $maxChainedEvents,
     );
 }
 
@@ -144,28 +138,6 @@ function hooksByState(array $entries): array
         /** @var list<Hook|callable(TransitionContext): mixed> $list validated by Definition */
         $list = listOf($hooks);
         $byState[$state] = [...($byState[$state] ?? []), ...$list];
-    }
-
-    return $byState;
-}
-
-/**
- * @param array<mixed> $entries
- * @return array<string, array<string, mixed>>
- *
- * @internal
- */
-function metaByState(array $entries): array
-{
-    $byState = [];
-
-    foreach (stateEntries($entries) as [$state, $meta]) {
-        if (!is_array($meta)) {
-            throw new InvalidDefinitionException(sprintf('Metadata for state "%s" must be an array.', $state));
-        }
-
-        /** @var array<string, mixed> $meta */
-        $byState[$state] = [...($byState[$state] ?? []), ...$meta];
     }
 
     return $byState;

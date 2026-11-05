@@ -405,15 +405,15 @@ final class MachineTest extends VideoTestCase
         $machine->send('PLAY');
     }
 
-    public function testSendIfAllowedReturnsFalseInsteadOfThrowing(): void
+    public function testTryTransitionReportsARefusalInsteadOfThrowing(): void
     {
         $machine = new Machine($this->video());
 
-        self::assertFalse($machine->sendIfAllowed('STOP'));
-        self::assertFalse($machine->sendIfAllowed('NOPE'));
+        self::assertFalse($machine->tryTransition('STOP')->ok());
+        self::assertFalse($machine->tryTransition('NOPE')->ok());
         self::assertSame('stopped', $machine->state);
 
-        self::assertTrue($machine->sendIfAllowed('PLAY'));
+        self::assertTrue($machine->tryTransition('PLAY')->ok());
         self::assertSame('playing', $machine->state);
     }
 

@@ -16,7 +16,7 @@ final readonly class Blocker
     /** No transition for the event leaves the current state. */
     public const string NOT_ALLOWED = 'not_allowed';
 
-    /** A guard said no without explaining why (see {@see because()} and transition `meta['blocked']`). */
+    /** A guard said no without explaining why; wrap it in {@see because()} for a message. */
     public const string GUARD_REJECTED = 'guard_rejected';
 
     /**

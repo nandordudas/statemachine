@@ -7,7 +7,6 @@ namespace Dudas\StateMachine;
 use BackedEnum;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
-use Generator;
 
 /**
  * The immutable blueprint of a machine: states, initial state and transitions.
@@ -48,8 +47,6 @@ final readonly class Definition
     /** @var array<string, list<Hook>> run before the machine leaves the state */
     private array $onExit;
 
-    /** @var array<string, array<string, mixed>> metadata by state name */
-    private array $stateMeta;
 
     /**
      * @param string|BackedEnum $initial
@@ -57,7 +54,6 @@ final readonly class Definition
      * @param array<mixed> $transitions every element must be a {@see Transition}
      * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onEnter hooks by state name
      * @param array<string, list<Hook|callable(TransitionContext): mixed>> $onExit hooks by state name
-     * @param array<string, array<string, mixed>> $stateMeta metadata by state name (`label` is shown in diagrams)
      */
     public function __construct(
         string|BackedEnum $initial,
@@ -65,7 +61,6 @@ final readonly class Definition
         array $transitions,
         array $onEnter = [],
         array $onExit = [],
-        array $stateMeta = [],
     ) {
         $initial = Name::of($initial);
         $known = Name::listOf($states);
@@ -107,7 +102,7 @@ final readonly class Definition
             $checked[] = $transition;
         }
 
-        $byStateName = ['onEnter hook' => $onEnter, 'onExit hook' => $onExit, 'Metadata' => $stateMeta];
+        $byStateName = ['onEnter hook' => $onEnter, 'onExit hook' => $onExit];
 
         foreach ($byStateName as $kind => $byState) {
             foreach (array_keys($byState) as $state) {
@@ -119,7 +114,6 @@ final readonly class Definition
 
         $this->onEnter = self::normalizeHooks($onEnter);
         $this->onExit = self::normalizeHooks($onExit);
-        $this->stateMeta = $stateMeta;
         $this->initial = $initial;
         $this->states = $known;
         $this->transitions = $checked;
@@ -222,43 +216,22 @@ final readonly class Definition
      */
     public function unreachableStates(): array
     {
-        $reached = iterator_to_array($this->shortestPaths());
-
-        return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
-    }
-
-    /**
-     * Lazily walks the graph breadth-first from the initial state and yields, for every reachable state,
-     * the shortest list of events that leads there (guards are ignored). Handy to generate tests:
-     *
-     *     foreach ($definition->shortestPaths() as $state => $events) {
-     *         self::assertSame($state, machineWithoutGuards()->sendAll($events)->state);
-     *     }
-     *
-     * @return Generator<string, list<string>, mixed, void>
-     */
-    public function shortestPaths(): Generator
-    {
-        /** @var array<string, list<string>> $paths */
-        $paths = [$this->initial => []];
+        $reached = [$this->initial => true];
         $queue = [$this->initial];
-        $next = 0;
 
-        // A moving index instead of array_shift(): each step is O(1).
-        while (isset($queue[$next])) {
-            $state = $queue[$next++];
-
-            yield $state => $paths[$state];
-
-            foreach ($this->bySource[$state] ?? [] as $candidates) {
+        // Breadth-first; a moving index instead of array_shift() keeps each step O(1).
+        for ($next = 0; isset($queue[$next]); $next++) {
+            foreach ($this->bySource[$queue[$next]] ?? [] as $candidates) {
                 foreach ($candidates as $transition) {
-                    if (!isset($paths[$transition->to])) {
-                        $paths[$transition->to] = [...$paths[$state], $transition->event];
+                    if (!isset($reached[$transition->to])) {
+                        $reached[$transition->to] = true;
                         $queue[] = $transition->to;
                     }
                 }
             }
         }
+
+        return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
 
     public function hasState(string $state): bool
@@ -305,16 +278,6 @@ final readonly class Definition
     public function transitionsFor(string $event): array
     {
         return $this->byEvent[$event] ?? [];
-    }
-
-    /**
-     * Metadata of a state (empty when none was given).
-     *
-     * @return array<string, mixed>
-     */
-    public function metaFor(string|BackedEnum $state): array
-    {
-        return $this->stateMeta[Name::of($state)] ?? [];
     }
 
     /**

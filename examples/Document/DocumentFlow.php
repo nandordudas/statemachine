@@ -22,7 +22,7 @@ use Dudas\StateMachine\TransitionContext;
  *  - SUBMIT by a trusted author skips review (two transitions for one event, guard decides)
  *  - APPROVE and REJECT need an {@see ApproverGuard}: the approver role, and not the author; it explains
  *    which rule failed, so `$flow->blockers(E::Approve, $payload)` can be shown to the user
- *  - transitions carry button labels in their metadata (`availableTransitions()` hands them to a UI)
+ *  - transitions carry button labels in their metadata (shown in the diagram, readable by a UI)
  *  - `onExit(review)` clears the reviewer assignment; `onEnter(published)` notifies subscribers
  *  - the machine drives `$document->status` through a CallbackStore, so the entity stays the
  *    single source of truth (no separate state column to keep in sync).
@@ -40,7 +40,6 @@ final class DocumentFlow
             ->states(...S::cases())
             ->onExit(S::Review, $clearReviewer)
             ->onEnter(S::Published, $notifySubscribers)
-            ->meta(S::Review, ['label' => 'In review'])
             ->transition(
                 Transition::on(E::Submit, S::Draft, S::Published)->withGuard(
                     static fn(TransitionContext $c): bool => ($c->payload['trustedAuthor'] ?? false) === true,
