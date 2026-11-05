@@ -9,7 +9,7 @@ use Dudas\StateMachine\Examples\OrderStatus\StatusGroup as G;
 
 /**
  * Which status changes the legacy system allows, expressed on status groups
- * (StatusObserverService::$allowedMovements and its status-level exceptions).
+ * (a table of allowed group movements plus a few status-level exceptions).
  */
 final class GroupRules
 {
@@ -39,7 +39,7 @@ final class GroupRules
         }
 
         // Same-group moves, including a status to itself, are allowed on purpose: this mirrors
-        // StatusObserverService, and LegacyOrderStatusRule pins it for every pair.
+        // the legacy validator, and LegacyOrderStatusRule pins it for every pair.
         if ($from->group() === $to->group()) {
             return true;
         }
