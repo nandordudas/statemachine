@@ -11,7 +11,7 @@ use Dudas\StateMachine\Transition;
 
 /**
  * The order status matrix as a state machine. The event is the status to move to, so
- * `send(OrderStatus::Completed, ['localPickup' => true])` reads like the legacy system's "set status".
+ * `send(OrderStatus::Completed, ['localPickup' => true])` reads like a plain "set status" call.
  * Sources of each event come from {@see GroupRules}; the local pickup rules are a guard.
  */
 final class OrderFlow

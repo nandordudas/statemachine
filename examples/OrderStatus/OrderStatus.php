@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Dudas\StateMachine\Examples\OrderStatus;
 
 /**
- * The enabled rows of the legacy system's `order_status` table (tests/databaseSeeds/order_status.sql).
+ * The enabled rows of the legacy `order_status` table.
  * Disabled rows (special, unpaid, out-of-stock, ...) have no group and are not modelled.
  * `New` is not a row: it stands for an order that has no status yet (`status_id` null).
  */
