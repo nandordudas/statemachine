@@ -109,16 +109,22 @@ final class BlockersTest extends TestCase
 
     public function testAGuardWithoutAReasonIsReportedAsAGenericRejection(): void
     {
+        $machine = $this->approval(on('APPROVE', 'review', 'published', guard: static fn(): bool => false));
+
+        $blockers = $machine->blockers('APPROVE');
+
+        self::assertSame([Blocker::GUARD_REJECTED], self::codes($blockers));
+        self::assertSame('closure', $blockers[0]->parameters['guard']);
+    }
+
+    public function testTheSameReasonFromSeveralGuardsIsListedOnce(): void
+    {
         $machine = $this->approval(on('APPROVE', 'review', 'published', guard: [
             static fn(): bool => false,
             not(static fn(): bool => true),
         ]));
 
-        $blockers = $machine->blockers('APPROVE');
-
-        // Both guards give the same generic reason, which the machine lists once.
-        self::assertSame([Blocker::GUARD_REJECTED], self::codes($blockers));
-        self::assertSame('closure', $blockers[0]->parameters['guard']);
+        self::assertSame([Blocker::GUARD_REJECTED], self::codes($machine->blockers('APPROVE')));
     }
 
     public function testUnknownAndNotAllowedEventsAreExplainedToo(): void
