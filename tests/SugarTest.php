@@ -132,7 +132,7 @@ final class SugarTest extends TestCase
 
         $video->sendAll([[E::Play, ['via' => 'test']], E::Pause]);
 
-        self::assertSame(S::Paused->value, $video->state);
+        self::assertSame(S::Paused, $video->stateAs(S::class));
         self::assertSame([['via' => 'test']], $seen);
     }
 

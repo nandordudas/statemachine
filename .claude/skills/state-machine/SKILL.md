@@ -11,7 +11,9 @@ List **states** (nouns: `Draft`, `Review`), **events** (verbs: `Submit`, `Approv
 source states and target. Decide which rules are *guards* (may this happen now? pure) and which are *hooks* (do
 something because it happened). Draw it: `$definition->toMermaid()`.
 
-Use string-backed enums for states and events (`enum DocState: string`), one file each.
+Use string-backed enums for states and events (`enum DocState: string`), one file each. Pass the enums
+everywhere; `->value` is never needed: read the state back with `$machine->stateAs(DocState::class)`, give
+`machine(onEnter:/onExit:/stateMeta:)` `[state, value]` pairs, and seed an `InMemoryStore` with an enum.
 
 ## 2. Build
 
