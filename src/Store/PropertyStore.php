@@ -31,11 +31,18 @@ final class PropertyStore implements StateStore
 
         $this->target = $target;
         $this->property = new ReflectionProperty($target, $property);
-        $this->property->setAccessible(true);
+        if (PHP_VERSION_ID < 80100) {
+            $this->property->setAccessible(true); // a no-op since 8.1 and deprecated in 8.5
+        }
     }
 
     public function get(): string
     {
+        // Typed properties (7.4+) can be uninitialized: report that as a missing state, not a raw Error.
+        if (method_exists($this->property, 'isInitialized') && !$this->property->isInitialized($this->target)) {
+            throw UnknownStateException::missing();
+        }
+
         $value = $this->property->getValue($this->target);
 
         if ($value === null) {
