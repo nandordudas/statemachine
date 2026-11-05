@@ -5,7 +5,7 @@ description: Model a workflow, status lifecycle or approval flow with the nandor
 
 # Modelling workflows with state-machine (PHP 7.2 port)
 
-Install: `composer require nandordudas/state-machine` (this is the `1.x` line for PHP 7.2 to 8.4; PHP 8.5+ gets `2.x`
+Install: `composer require nandordudas/state-machine` (this is the `1.x` line for PHP 7.2 to 8.4; PHP 8.5+ gets `3.x`
 with enums). Pin `^1.0` to stay on this API.
 
 ## 1. Model first

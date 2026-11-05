@@ -1,7 +1,7 @@
 # state-machine (PHP 7.2 port)
 
 A small, strictly typed finite state machine for **PHP 7.2+**. This is the `php72` branch, the `1.x` line of
-`nandordudas/state-machine`: a hand-port of the PHP 8.5 library on `main` (`2.x`), with the same concepts and
+`nandordudas/state-machine`: a hand-port of the PHP 8.5 library on `main` (`3.x`), with the same concepts and
 nearly the same API.
 
 Differences from the PHP 8.5 version: states and events are plain **strings** (no enums), the state is
@@ -15,15 +15,14 @@ One Composer package, two version lines:
 | Version | PHP | Branch | API |
 |---|---|---|---|
 | `1.x` | 7.2 and up | `php72` (this one) | plain-string states and events |
-| `2.x` | 8.5 and up | `main` | backed enums, named arguments |
+| `3.x` | 8.5 and up | `main` | backed enums, named arguments |
 
 ```bash
 composer require nandordudas/state-machine
 ```
 
-Composer picks the newest version your PHP can run: 2.x on PHP 8.5+, 1.x on PHP 7.2 to 8.4. To force this line on
-a newer PHP, require `^1.0`. Until a `1.x` tag exists, use the branch:
-`composer require nandordudas/state-machine:dev-php72`.
+Composer picks the newest version your PHP can run (3.x on PHP 8.5+, 1.x on PHP 7.2 to 8.4). To force this line on
+a newer PHP, require `^1.0`.
 
 For a private fork, add a VCS repository and give Composer a read-only token
 (`composer config --global github-oauth.github.com <token>`):
@@ -129,7 +128,7 @@ file_put_contents('flow.mmd', $definition->toMermaid());   // draw it
 
 Guards (`withGuard`, `allOf`, ...) decide whether an event is allowed and must be side-effect free. Hooks
 (`before`, `onExit`, `onEnter`, `after`) do the work. Name states and events with class constants (as above) to
-get some of the type safety enums give on the 2.x line; `Name::constantsOf()` lists them where 2.x lists enum cases.
+get some of the type safety enums give on the 3.x line; `Name::constantsOf()` lists them where 3.x lists enum cases.
 
 ## Semantics
 
@@ -148,10 +147,22 @@ get some of the type safety enums give on the 2.x line; `Name::constantsOf()` li
 Stores shared between writers should implement `AtomicStateStore` (`compareAndSet`); `InMemoryStore` and
 `AtomicCallbackStore` do. Guards may run twice (`can()` then `send()`), so keep them side-effect free.
 
+## Status of this line
+
+`1.x` is **maintenance only** (security and bug fixes). It does not have what `3.x` added since: run-to-completion
+(events sent from `onEnter`/`after` hooks are applied recursively here, with no chain limit, so a hook cycle recurses
+until PHP's limits), fiber awareness, abort hooks, blockers/`because()`, metadata, `LockingStore` and
+`TransactionalStateStore`, bounded history, `stateAs()`, `stream()`/`drive()`, benchmarks and diagrams of examples.
+If you need those, use `3.x` (PHP 8.5+).
+
+Read the concurrency notes of the `3.x` README too: `PropertyStore`/`CallbackStore` are read-then-write (one owner per
+row), reload the entity before retrying a lost race, `ConcurrentTransitionException::$retryable` and `TransitionApplied`
+tell a retryable failure from one where the state already changed, and Swoole coroutines are not supported.
+
 ## Contributing
 
-Code must stay valid PHP 7.2 (see `AGENTS.md`). Features land on `main` (2.x) first and are hand-ported here;
-keep the two in step: a feature released as `2.Y.0` ships here as `1.Y.0`.
+Code must stay valid PHP 7.2 (see `AGENTS.md`). Features land on `main` (3.x) first and are hand-ported on request;
+keep the two in step: a bug fix released as `3.Y.Z` ships here as `1.Y.Z`.
 
 ## Develop
 
