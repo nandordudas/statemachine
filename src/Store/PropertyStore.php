@@ -77,6 +77,10 @@ final readonly class PropertyStore implements StateStore
 
     public function get(): string
     {
+        if (!$this->property->isInitialized($this->target)) {
+            throw UnknownStateException::missing();
+        }
+
         $value = $this->property->getValue($this->target);
 
         if ($value === null) {
