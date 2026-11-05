@@ -12,7 +12,7 @@ use Throwable;
  * An `after` or `onEnter` hook threw. The transition HAS happened: the new state is stored
  * and is not rolled back. The original error is available as {@see getPrevious()}.
  */
-final class AfterHookFailedException extends RuntimeException implements StateMachineException
+final class AfterHookFailedException extends RuntimeException implements TransitionApplied
 {
     /** @var TransitionContext @readonly */
     public $context;
