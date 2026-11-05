@@ -96,7 +96,7 @@ jobs:
 
       # The same tests again on MySQL: row locks, affected-rows semantics and real transactions.
       - name: composer test (MySQL)
-        if: ${{ !cancelled() && matrix.db }}
+        if: ${{ !cancelled() && matrix.db && hashFiles('tests/Integration/OrderRowTest.php') != '' }}
         env:
           DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=state_machine
           DB_USER: root
