@@ -45,8 +45,8 @@ update the entity). When guards read other columns too, wrap the store in a `Loc
 
 `send()` throws; `tryTransition()` returns refusals as a result (`->ok()`, `->failure`) and throws only for hook and
 concurrency failures. Catch `StateMachineException` for all library errors. Pass data via the payload array, read in
-guards/hooks through `TransitionContext`. Prefer `tryTransition()` over `can()` + `send()` (racy); `sendAll()` sends
-several events in order.
+guards/hooks through `TransitionContext` (`$context->fromAs(DocState::class)` and `toAs()` give the states as
+enums). Prefer `tryTransition()` over `can()` + `send()` (racy); `sendAll()` sends several events in order.
 
 ## Rules of thumb
 

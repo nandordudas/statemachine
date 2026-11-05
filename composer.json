@@ -47,7 +47,7 @@
         ]
     },
     "archive": {
-        "exclude": ["/vendor", "/tests", "/bench", "/examples", "/docs", "/.github", "/.vscode", "/.claude", "/.archify", "/.editorconfig", "/.gitattributes", "/.gitignore", "/AGENTS.md", "/CLAUDE.md", "/CONTRIBUTING.md", "/mago.toml", "/phpstan.neon.dist", "/phpunit.xml.dist", "/.php-cs-fixer.dist.php", "/dist"]
+        "exclude": ["/vendor", "/dist"]
     },
     "extra": {
         "branch-alias": {
