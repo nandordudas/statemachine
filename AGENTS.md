@@ -40,7 +40,7 @@ $doc = machine(
 );
 
 $doc->send(DocEvent::Submit);                      // throws on refusal
-$doc->sendIfAllowed(DocEvent::Approve, $payload);  // bool, never throws for a refusal
+$doc->sendIfAllowed(DocEvent::Approve, $payload);  // bool: false when refused (hook failures still throw)
 $doc->tryTransition(DocEvent::Approve, $payload);  // TransitionResult: ok(), failure, state
 $flow = machineFor($definition, $entity, 'status'); // state in a string/enum-typed property
 $doc->stateAs(DocState::class);                    // the current state as the enum ($doc->state is its name)
