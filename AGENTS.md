@@ -14,6 +14,10 @@ A small finite state machine. A `Definition` (immutable blueprint: states, initi
 
 - PHP 8.5, `declare(strict_types=1);` everywhere, `final`/`readonly` by default, PER-CS style (`composer format`).
 - Only **string-backed** enums may name states/events; int-backed enums throw `InvalidDefinitionException`.
+- Documentation and `examples/` name states and events with enums, never string literals, and do not write
+  `->value` where the API takes an enum (`stateAs()`, `InMemoryStore`, `[state, hook]` pairs in `machine()`).
+  Tests may use strings: they check that plain names keep working. Read `SomeEnum::cases()` once into a variable
+  when it is used more than once.
 - Keep the API additive and update the README semantics table when behaviour changes.
 - Every behaviour change needs a test (`tests/`); examples live in `examples/` and are checked in `tests/Examples`.
 - Keep `main` and `php72` in step: a feature added here should be ported (hand-port, no enums) to `php72`.
@@ -32,13 +36,14 @@ $doc = machine(
         on(DocEvent::Approve, DocState::Review, DocState::Published,
             guard: allOf(payloadIs('role', 'approver'), not(payloadsEqual('actor', 'author')))),
     ],
-    onEnter: [DocState::Published->value => $notify],
+    onEnter: [[DocState::Published, $notify]],                 // [state, hook(s)] pairs: no ->value
 );
 
 $doc->send(DocEvent::Submit);                      // throws on refusal
 $doc->sendIfAllowed(DocEvent::Approve, $payload);  // bool, never throws for a refusal
 $doc->tryTransition(DocEvent::Approve, $payload);  // TransitionResult: ok(), failure, state
 $flow = machineFor($definition, $entity, 'status'); // state in a string/enum-typed property
+$doc->stateAs(DocState::class);                    // the current state as the enum ($doc->state is its name)
 ```
 
 Pipeline of `send()`: select transition (guards, first permitted wins) → `before` hooks → `onExit` hooks → store write

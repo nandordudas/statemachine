@@ -110,6 +110,23 @@ final class Machine implements StateMachine
         }
     }
 
+    /**
+     * The current state as a case of `$enum`, for code that works with enums rather than state names:
+     *
+     *     $video->stateAs(VideoState::class);   // VideoState::Playing
+     *
+     * @template T of BackedEnum
+     * @param class-string<T> $enum
+     * @return T
+     * @throws UnknownStateException when the state is not a case of `$enum`
+     */
+    public function stateAs(string $enum): BackedEnum
+    {
+        $state = $this->state;
+
+        return $enum::tryFrom($state) ?? throw UnknownStateException::notACase($state, $enum);
+    }
+
     public function is(string|BackedEnum ...$states): bool
     {
         $current = $this->state;

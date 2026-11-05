@@ -18,34 +18,35 @@ final class OrderFlow
 {
     public static function definition(): Definition
     {
+        $statuses = OrderStatus::cases(); // read once: every target scans all statuses for its sources
         $transitions = [];
 
-        foreach (OrderStatus::cases() as $target) {
+        foreach ($statuses as $target) {
             if ($target === OrderStatus::New) {
                 continue;
             }
 
-            $sources = array_values(array_filter(OrderStatus::cases(), static fn(OrderStatus $source): bool => GroupRules::allows(
-                $source,
-                $target,
-            )));
+            $sources = array_values(array_filter(
+                $statuses,
+                static fn(OrderStatus $source): bool => GroupRules::allows($source, $target),
+            ));
 
             if ($sources !== []) {
                 $transitions[] = Transition::on($target, $sources, $target)->withGuard(new LocalPickupGuard());
             }
         }
 
-        return new Definition(OrderStatus::New, OrderStatus::cases(), $transitions);
+        return new Definition(OrderStatus::New, $statuses, $transitions);
     }
 
     public static function machine(OrderStatus $current = OrderStatus::New): Machine
     {
-        return new Machine(self::definition(), new InMemoryStore($current->value));
+        return new Machine(self::definition(), new InMemoryStore($current));
     }
 
     public static function groupOf(Machine $machine): StatusGroup
     {
-        return OrderStatus::from($machine->state)->group();
+        return $machine->stateAs(OrderStatus::class)->group();
     }
 
     private function __construct() {}

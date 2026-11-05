@@ -15,7 +15,7 @@ use Dudas\StateMachine\Guards\Explain;
  *
  * Guards, `before` and `after` hooks are added with the `with*` methods, each returning a new instance:
  *
- *     Transition::on('PLAY', from: ['stopped', 'paused'], to: 'playing')
+ *     Transition::on(E::Play, from: [S::Stopped, S::Paused], to: S::Playing)
  *         ->withGuard(fn (TransitionContext $c) => $c->payload['user'] !== null)
  *         ->withAfter(fn (TransitionContext $c) => $logger->info($c->event));
  */

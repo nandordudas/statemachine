@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Tests;
 
+use Closure;
 use Dudas\StateMachine\Definition;
+use Dudas\StateMachine\Exception\InvalidDefinitionException;
+use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Machine;
+use Dudas\StateMachine\Store\InMemoryStore;
 use Dudas\StateMachine\Tests\Fixtures\VideoEvent as E;
 use Dudas\StateMachine\Tests\Fixtures\VideoState as S;
 use Dudas\StateMachine\TransitionContext;
@@ -36,7 +40,7 @@ final class HelpersTest extends TestCase
                 ),
             ],
             onEnter: [
-                S::Playing->value => static function () use (&$log): void {
+                'playing' => static function () use (&$log): void { // a map keyed by state name still works
                     $log[] = 'enter:playing';
                 },
             ],
@@ -67,5 +71,48 @@ final class HelpersTest extends TestCase
 
         self::assertSame(['draft', 'review', 'published', 'archived'], $definition->states);
         self::assertSame('published', new Machine($definition)->send('SUBMIT')->send('APPROVE')->state);
+    }
+
+    public function testStateHooksAndMetaTakeEnumPairs(): void
+    {
+        $log = [];
+        $hook = static function (string $entry) use (&$log): Closure {
+            return static function () use (&$log, $entry): void {
+                $log[] = $entry;
+            };
+        };
+        $video = machine(
+            initial: S::Stopped,
+            states: S::class,
+            transitions: [on(E::Play, S::Stopped, S::Playing), on(E::Stop, S::Playing, S::Stopped)],
+            onEnter: [[S::Playing, $hook('enter:playing')], [S::Playing, [$hook('enter:again')]]],
+            onExit: [[S::Playing, $hook('exit:playing')]],
+            stateMeta: [[S::Playing, ['label' => 'Playing']], [S::Playing, ['color' => 'green']]],
+        );
+
+        $video->send(E::Play)->send(E::Stop);
+
+        self::assertSame(['enter:playing', 'enter:again', 'exit:playing'], $log);
+        self::assertSame(['label' => 'Playing', 'color' => 'green'], $video->definition->metaFor(S::Playing));
+    }
+
+    public function testStateMetaMustBeAnArray(): void
+    {
+        $this->expectException(InvalidDefinitionException::class);
+
+        machine(initial: S::Stopped, states: S::class, transitions: [], stateMeta: [[S::Playing, 'not an array']]);
+    }
+
+    public function testTheStateCanBeReadAsAnEnum(): void
+    {
+        $store = new InMemoryStore(S::Playing); // an enum, no ->value
+        $video = new Machine(Definition::fromTable(S::Stopped, [[E::Play, S::Stopped, S::Playing]]), $store);
+
+        self::assertSame(S::Playing, $video->stateAs(S::class));
+
+        $this->expectException(UnknownStateException::class);
+        $this->expectExceptionMessage('State "playing" is not a case of ' . E::class . '.');
+
+        $video->stateAs(E::class);
     }
 }

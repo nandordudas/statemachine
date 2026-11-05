@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Dudas\StateMachine\Store;
 
+use BackedEnum;
 use Dudas\StateMachine\Contracts\AtomicStateStore;
+use Dudas\StateMachine\Name;
 
 final class InMemoryStore implements AtomicStateStore
 {
-    public function __construct(
-        private string $state,
-    ) {}
+    private string $state;
+
+    public function __construct(string|BackedEnum $state)
+    {
+        $this->state = Name::of($state);
+    }
 
     public function get(): string
     {

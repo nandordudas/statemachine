@@ -10,6 +10,7 @@ use Dudas\StateMachine\Contracts\ExplainingGuard;
 use Dudas\StateMachine\Contracts\Guard;
 use Dudas\StateMachine\Contracts\Hook;
 use Dudas\StateMachine\Contracts\StateStore;
+use Dudas\StateMachine\Exception\InvalidDefinitionException;
 use Dudas\StateMachine\Guards\AllOf;
 use Dudas\StateMachine\Guards\AnyOf;
 use Dudas\StateMachine\Guards\Because;
@@ -53,15 +54,18 @@ function on(
  *         initial: S::Stopped,
  *         states: S::class,                       // or a list; an enum class lists all its cases
  *         transitions: [on(E::Play, S::Stopped, S::Playing)],
- *         onEnter: [S::Playing->value => $log],   // hooks by state name
+ *         onEnter: [[S::Playing, $log]],          // [state, hook(s)] pairs: no ->value needed
  *     );
+ *
+ * `onEnter`, `onExit` and `stateMeta` take `[state, value]` pairs, so a state can be an enum (PHP array keys
+ * cannot be). A map keyed by state name (`['playing' => $log]`) still works. Pairs for the same state are merged.
  *
  * @param class-string<BackedEnum>|list<string|BackedEnum> $states
  * @param list<Transition> $transitions
- * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onEnter
- * @param array<string, Hook|callable(TransitionContext): mixed|list<Hook|callable(TransitionContext): mixed>> $onExit
+ * @param array<array{BackedEnum, mixed}|mixed> $onEnter hooks by state: `[state, hook|list<hook>]` pairs or a map
+ * @param array<array{BackedEnum, mixed}|mixed> $onExit hooks by state: `[state, hook|list<hook>]` pairs or a map
  * @param bool|int $history true records every transition, a positive int only the latest N
- * @param array<string, array<string, mixed>> $stateMeta metadata by state name
+ * @param array<array{BackedEnum, mixed}|mixed> $stateMeta metadata by state: `[state, array]` pairs or a map
  */
 function machine(
     string|BackedEnum $initial,
@@ -81,14 +85,81 @@ function machine(
             $initial,
             $states,
             $transitions,
-            array_map(listOf(...), $onEnter),
-            array_map(listOf(...), $onExit),
-            $stateMeta,
+            hooksByState($onEnter),
+            hooksByState($onExit),
+            metaByState($stateMeta),
         ),
         $store,
         $history,
         $maxChainedEvents,
     );
+}
+
+/**
+ * `[state, value]` pairs, or `state name => value` entries, as `[name, value]` pairs.
+ *
+ * @param array<mixed> $entries
+ * @return list<array{string, mixed}>
+ *
+ * @internal
+ */
+function stateEntries(array $entries): array
+{
+    $pairs = [];
+
+    foreach ($entries as $key => $value) {
+        // A pair starts with an enum: a hook (or a list of hooks) never does, so a map entry is never mistaken.
+        if (is_int($key) && is_array($value) && count($value) === 2 && ($value[0] ?? null) instanceof BackedEnum) {
+            $pairs[] = [Name::of($value[0]), $value[1] ?? null];
+
+            continue;
+        }
+
+        $pairs[] = [(string) $key, $value];
+    }
+
+    return $pairs;
+}
+
+/**
+ * @param array<mixed> $entries
+ * @return array<string, list<Hook|callable(TransitionContext): mixed>>
+ *
+ * @internal
+ */
+function hooksByState(array $entries): array
+{
+    $byState = [];
+
+    foreach (stateEntries($entries) as [$state, $hooks]) {
+        /** @var list<Hook|callable(TransitionContext): mixed> $list validated by Definition */
+        $list = listOf($hooks);
+        $byState[$state] = [...$byState[$state] ?? [], ...$list];
+    }
+
+    return $byState;
+}
+
+/**
+ * @param array<mixed> $entries
+ * @return array<string, array<string, mixed>>
+ *
+ * @internal
+ */
+function metaByState(array $entries): array
+{
+    $byState = [];
+
+    foreach (stateEntries($entries) as [$state, $meta]) {
+        if (!is_array($meta)) {
+            throw new InvalidDefinitionException(sprintf('Metadata for state "%s" must be an array.', $state));
+        }
+
+        /** @var array<string, mixed> $meta */
+        $byState[$state] = [...$byState[$state] ?? [], ...$meta];
+    }
+
+    return $byState;
 }
 
 /**

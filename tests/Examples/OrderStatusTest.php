@@ -32,8 +32,10 @@ final class OrderStatusTest extends TestCase
      */
     public static function everyMovement(): iterable
     {
-        foreach (S::cases() as $old) {
-            foreach (S::cases() as $new) {
+        $statuses = S::cases();
+
+        foreach ($statuses as $old) {
+            foreach ($statuses as $new) {
                 if ($new === S::New) {
                     continue;
                 }
@@ -49,15 +51,35 @@ final class OrderStatusTest extends TestCase
         }
     }
 
+    /**
+     * The `status => group` map the legacy rule reads, built once for all 1,860 movements.
+     *
+     * @return array<string, string>
+     */
+    private static function legacyGroups(): array
+    {
+        static $groups = null;
+
+        if ($groups === null) {
+            $groups = [];
+
+            foreach (S::cases() as $status) {
+                $groups[$status->value] = $status->group()->value;
+            }
+        }
+
+        return $groups;
+    }
+
     #[DataProvider('everyMovement')]
     public function testMachineMatchesTheLegacyRules(S $old, S $new, bool $pickup): void
     {
-        $groups = [];
-        foreach (S::cases() as $status) {
-            $groups[$status->value] = $status->group()->value;
-        }
-
-        $expected = LegacyOrderStatusRule::allows($old === S::New ? '' : $old->value, $new->value, $pickup, $groups);
+        $expected = LegacyOrderStatusRule::allows(
+            $old === S::New ? '' : $old->value,
+            $new->value,
+            $pickup,
+            self::legacyGroups(),
+        );
 
         self::assertSame($expected, OrderFlow::machine($old)->can($new, ['localPickup' => $pickup]));
     }

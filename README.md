@@ -4,31 +4,51 @@ A small, strictly typed finite state machine for PHP 8.5. A modern rewrite of
 [mouadziani/xstate](https://github.com/mouadziani/xstate).
 
 ```php
+namespace App;
+
+enum VideoState: string
+{
+    case Stopped = 'stopped';
+    case Playing = 'playing';
+    case Paused = 'paused';
+}
+
+enum VideoEvent: string
+{
+    case Play = 'PLAY';
+    case Pause = 'PAUSE';
+    case Stop = 'STOP';
+}
+```
+
+```php
+use App\{VideoEvent as E, VideoState as S};
 use Dudas\StateMachine\{Definition, Machine, Transition, TransitionContext};
 
 $definition = Definition::builder()
-    ->initial('stopped')
-    ->states('playing', 'stopped', 'paused')
+    ->initial(S::Stopped)
+    ->states(...S::cases())
     ->transition(
-        Transition::on('PLAY', from: ['stopped', 'paused'], to: 'playing')
+        Transition::on(E::Play, from: [S::Stopped, S::Paused], to: S::Playing)
             ->withGuard(fn (TransitionContext $c) => $c->payload['licensed'] ?? false)
             ->withAfter(fn (TransitionContext $c) => $log->info("{$c->from} -> {$c->to}")),
-        Transition::on('PAUSE', 'playing', 'paused'),
-        Transition::on('STOP', 'playing', 'stopped'),
+        Transition::on(E::Pause, S::Playing, S::Paused),
+        Transition::on(E::Stop, S::Playing, S::Stopped),
     )
     ->build();
 
 $video = new Machine($definition);
-$video->send('PLAY', ['licensed' => true]);
-$video->state;             // 'playing'
-$video->availableEvents(); // ['PAUSE', 'STOP']
-$video->can('PLAY');       // false
+$video->send(E::Play, ['licensed' => true]);
+$video->is(S::Playing);          // true
+$video->stateAs(S::class);       // S::Playing ($video->state is the name: 'playing')
+$video->availableEvents();       // ['PAUSE', 'STOP']
+$video->can(E::Play);            // false
 ```
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="preview/video.dark.png">
-  <img src="preview/video.light.png" alt="State diagram of the video player: stopped, playing and paused; PLAY needs a licence, PAUSE and STOP leave playing.">
-</picture>
+Enums are the recommended way to name states and events: every method takes them, and only string-backed enums
+are accepted. Plain strings work too (they are what the store holds). There is no `->value` to write:
+`stateAs()` returns the enum, `InMemoryStore` takes one, and `machine()` takes `[state, hook]` pairs where PHP
+array keys could not hold an enum.
 
 ## Shorthand helpers
 
@@ -42,7 +62,7 @@ $doc = machine(
         on(E::Submit, S::Draft, S::Review),
         on(E::Approve, S::Review, S::Published, guard: new ApproverGuard(), after: $audit),
     ],
-    onEnter: [S::Published->value => $notify],
+    onEnter: [[S::Published, $notify]],                // [state, hook(s)] pairs; a name-keyed map works too
 );
 
 $doc->sendIfAllowed(E::Approve, $payload);             // bool, never throws for a refusal
@@ -166,7 +186,7 @@ Diagrams are in [`preview/`](preview/); open the `.html` files for an interactiv
 ## Semantics
 
 `send()` runs: select transition (guards) → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
-`onEnter`/`onExit` are per-state hooks registered on the builder (`->onEnter('playing', fn ($c) => ...)`).
+`onEnter`/`onExit` are per-state hooks registered on the builder (`->onEnter(S::Playing, fn ($c) => ...)`).
 
 | Situation | Result |
 |---|---|

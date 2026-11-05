@@ -12,9 +12,9 @@ use Dudas\StateMachine\Exception\InvalidDefinitionException;
  * Fluent assembly of a {@see Definition}:
  *
  *     $definition = Definition::builder()
- *         ->initial('stopped')
- *         ->states('playing', 'stopped', 'paused')
- *         ->transition(Transition::on('PLAY', ['stopped', 'paused'], 'playing'))
+ *         ->initial(S::Stopped)
+ *         ->states(...S::cases())
+ *         ->transition(Transition::on(E::Play, [S::Stopped, S::Paused], S::Playing))
  *         ->build();
  */
 final class DefinitionBuilder

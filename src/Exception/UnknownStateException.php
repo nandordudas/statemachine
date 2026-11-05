@@ -13,6 +13,11 @@ final class UnknownStateException extends InvalidArgumentException implements St
         return new self(sprintf('State "%s" is not part of the definition.', $state));
     }
 
+    public static function notACase(string $state, string $enum): self
+    {
+        return new self(sprintf('State "%s" is not a case of %s.', $state, $enum));
+    }
+
     public static function missing(): self
     {
         return new self('The state store holds no state.');
