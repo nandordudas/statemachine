@@ -78,7 +78,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           php -d zend.assertions=-1 bench/run.php 50000 | tee "$RUNNER_TEMP/head.txt"
-          [ -n "$BASE_REF" ] || exit 0
+          # Compare only with this job's own line (a pull request into php72 is not measured against main).
+          [ "$BASE_REF" = "${{ matrix.ref }}" ] || exit 0
           git fetch --quiet --depth=1 origin "$BASE_REF"
           git worktree add --quiet "$RUNNER_TEMP/base" FETCH_HEAD
           cp -r vendor "$RUNNER_TEMP/base/"
