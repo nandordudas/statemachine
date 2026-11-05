@@ -33,16 +33,19 @@ final readonly class LockingStore implements AtomicStateStore, TransactionalStat
         private Closure $transaction,
     ) {}
 
+    #[\Override]
     public function get(): string
     {
         return $this->inner->get();
     }
 
+    #[\Override]
     public function set(string $state): void
     {
         $this->inner->set($state);
     }
 
+    #[\Override]
     public function compareAndSet(string $expected, string $state): bool
     {
         if ($this->inner instanceof AtomicStateStore) {
@@ -64,6 +67,7 @@ final readonly class LockingStore implements AtomicStateStore, TransactionalStat
      * @param Closure(): T $work
      * @return T
      */
+    #[\Override]
     public function transaction(Closure $work): mixed
     {
         $outcome = new class {

@@ -14,11 +14,13 @@ use Dudas\StateMachine\TransitionContext;
  */
 final readonly class ApproverGuard implements ExplainingGuard
 {
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return $this->blockers($context) === [];
     }
 
+    #[\Override]
     public function blockers(TransitionContext $context): array
     {
         $actor = $context->payload['actor'] ?? null;

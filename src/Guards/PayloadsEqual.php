@@ -15,6 +15,7 @@ final readonly class PayloadsEqual implements Guard
         private string $b,
     ) {}
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return ($context->payload[$this->a] ?? null) === ($context->payload[$this->b] ?? null);

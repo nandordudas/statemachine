@@ -25,6 +25,7 @@ final readonly class CallbackStore implements StateStore
         private Closure $writer,
     ) {}
 
+    #[\Override]
     public function get(): string
     {
         $state = ($this->reader)();
@@ -32,6 +33,7 @@ final readonly class CallbackStore implements StateStore
         return $state === null ? throw UnknownStateException::missing() : Name::of($state);
     }
 
+    #[\Override]
     public function set(string $state): void
     {
         ($this->writer)($state);

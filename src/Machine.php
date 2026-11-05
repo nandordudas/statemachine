@@ -112,6 +112,7 @@ final class Machine implements StateMachine
      * @return T
      * @throws UnknownStateException when the state is not a case of `$enum`
      */
+    #[\Override]
     public function stateAs(string $enum): BackedEnum
     {
         $state = $this->state;
@@ -119,6 +120,7 @@ final class Machine implements StateMachine
         return $enum::tryFrom($state) ?? throw UnknownStateException::notACase($state, $enum);
     }
 
+    #[\Override]
     public function is(string|BackedEnum ...$states): bool
     {
         $current = $this->state;
@@ -132,11 +134,13 @@ final class Machine implements StateMachine
         return false;
     }
 
+    #[\Override]
     public function can(string|BackedEnum $event, array $payload = []): bool
     {
         return $this->select(Name::of($event), $this->state, $payload) !== null;
     }
 
+    #[\Override]
     public function availableEvents(array $payload = []): array
     {
         $from = $this->state;
@@ -163,6 +167,7 @@ final class Machine implements StateMachine
      * @param array<string, mixed> $payload
      * @return list<Blocker>
      */
+    #[\Override]
     public function blockers(string|BackedEnum $event, array $payload = []): array
     {
         $event = Name::of($event);
@@ -194,6 +199,7 @@ final class Machine implements StateMachine
         }
     }
 
+    #[\Override]
     public function send(string|BackedEnum $event, array $payload = []): static
     {
         $this->dispatch(Name::of($event), $payload, self::THROW);
@@ -204,6 +210,7 @@ final class Machine implements StateMachine
     /**
      * Not atomic: events applied before a failing one stay applied.
      */
+    #[\Override]
     public function sendAll(iterable $events): static
     {
         foreach ($events as $item) {
@@ -233,6 +240,7 @@ final class Machine implements StateMachine
         ];
     }
 
+    #[\Override]
     public function tryTransition(string|BackedEnum $event, array $payload = []): TransitionResult
     {
         $result = $this->dispatch(Name::of($event), $payload, self::RESULT);
@@ -359,7 +367,7 @@ final class Machine implements StateMachine
         if ($failures !== []) {
             $this->queue = [];
 
-            throw new AfterHookFailedException($context, $failures[0], $failures);
+            throw new AfterHookFailedException($context, array_first($failures), $failures);
         }
 
         return $context;

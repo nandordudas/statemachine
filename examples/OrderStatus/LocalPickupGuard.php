@@ -14,6 +14,7 @@ use Dudas\StateMachine\TransitionContext;
  */
 final readonly class LocalPickupGuard implements Guard
 {
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         $from = $context->fromAs(S::class);

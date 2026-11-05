@@ -21,6 +21,7 @@ final readonly class ClosureHook implements Hook
         return $hook instanceof Hook ? $hook : new self($hook(...));
     }
 
+    #[\Override]
     public function handle(TransitionContext $context): void
     {
         ($this->callback)($context);

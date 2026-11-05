@@ -36,11 +36,13 @@ final readonly class Because implements ExplainingGuard
         $this->guard = ClosureGuard::wrap($guard);
     }
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return $this->guard->allows($context);
     }
 
+    #[\Override]
     public function blockers(TransitionContext $context): array
     {
         if ($this->guard->allows($context)) {
