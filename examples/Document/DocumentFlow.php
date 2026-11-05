@@ -69,6 +69,5 @@ final class DocumentFlow
         });
 
         return machineFor($definition, $document); // reads and writes the enum-typed $document->status
-
     }
 }
