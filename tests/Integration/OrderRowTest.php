@@ -63,8 +63,7 @@ final class OrderRowTest extends DatabaseTestCase
     private function load(PDO $pdo): OrderEntity
     {
         $entity = new OrderEntity();
-        $status = $pdo->query('SELECT status FROM orders WHERE id = 1')?->fetchColumn();
-        $entity->status = is_string($status) ? $status : '';
+        $entity->status = $this->rowStatus($pdo);
 
         return $entity;
     }
@@ -85,7 +84,11 @@ final class OrderRowTest extends DatabaseTestCase
             self::assertTrue($e->retryable);
         }
 
-        self::assertSame('review', $this->status($a), 'review -> cancelled must not be persisted by the stale writer');
+        self::assertSame(
+            'review',
+            $this->rowStatus($a),
+            'review -> cancelled must not be persisted by the stale writer',
+        );
     }
 
     public function testASelfLoopIsNotMistakenForALostRace(): void
@@ -97,7 +100,7 @@ final class OrderRowTest extends DatabaseTestCase
         // MySQL reports 0 affected rows for UPDATE ... SET status = 'review' WHERE status = 'review'.
         $machine->send('TOUCH');
 
-        self::assertSame('review', $this->status($pdo));
+        self::assertSame('review', $this->rowStatus($pdo));
     }
 
     public function testGuardsReadDataUnderTheRowLockAndTheWriteCommitsWithIt(): void
@@ -132,7 +135,7 @@ final class OrderRowTest extends DatabaseTestCase
 
         $machine->send('PAY', ['balance' => 25]);
 
-        self::assertSame('paid', $this->status($this->connect()));
+        self::assertSame('paid', $this->rowStatus($this->connect()));
     }
 
     public function testAFailingBeforeHookRollsTheRowBack(): void
@@ -172,6 +175,6 @@ final class OrderRowTest extends DatabaseTestCase
         } catch (RuntimeException) {
         }
 
-        self::assertSame('review', $this->status($this->connect()));
+        self::assertSame('review', $this->rowStatus($this->connect()));
     }
 }

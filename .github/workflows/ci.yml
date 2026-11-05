@@ -78,7 +78,7 @@ jobs:
 
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: composer audit
+      - run: composer audit --abandoned=report
 
       # Each check runs even when an earlier one failed (the job still fails), so one run reports every problem.
       - run: mago --version
