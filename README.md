@@ -65,7 +65,7 @@ $doc = machine(
     onEnter: [[S::Published, $notify]],                // [state, hook(s)] pairs; a name-keyed map works too
 );
 
-$doc->sendIfAllowed(E::Approve, $payload);             // bool, never throws for a refusal
+$doc->sendIfAllowed(E::Approve, $payload);             // bool: false when refused (hook failures still throw)
 $result = $doc->tryTransition(E::Approve, $payload);   // ->ok(), ->failure (why), ->state
 ```
 
@@ -195,11 +195,12 @@ Diagrams are in [`preview/`](preview/); open the `.html` files for an interactiv
 | Transition exists but every guard vetoes | `GuardRejectedException` (`->blockers()` says why) |
 | `before` or `onExit` hook throws | transition aborted, state unchanged, the transition's `abort` hooks run, exception propagates |
 | `send()` from a `before`/`onExit` hook | `ConcurrentTransitionException`, stale transition not applied |
-| State changed during `before`/`onExit` hooks, or the atomic write lost the race | `ConcurrentTransitionException`, `abort` hooks run |
+| State changed during `before`/`onExit` hooks, or the atomic write lost the race | `ConcurrentTransitionException` (`->retryable`), `abort` hooks run |
+| A self-loop (`from === to`) | applied and hooks run, but nothing is written |
 | `send()` from a guard (also inside `can()`) | `ConcurrentTransitionException` |
 | `send()` from another fiber while a transition is running | `ConcurrentTransitionException` (reads stay possible) |
 | `send()`/`tryTransition()` from an `onEnter`/`after` hook | queued; applied after every hook of the current transition, inside the outer call |
-| A queued `send()` is refused | its exception propagates from the outer call; the outer transition stays applied |
+| A queued `send()` is refused | its exception propagates from the outer call (so `sendIfAllowed()`/`tryTransition()` can throw too); the outer transition stays applied, the rest of the queue is dropped |
 | A queued `tryTransition()`/`sendIfAllowed()` is refused | dropped; the hook got a result with `->queued === true` |
 | Hooks keep chaining events (a cycle) | `ChainLimitExceededException` after `maxChainedEvents` (default 100) |
 | `onEnter`/`after` hook throws `Exception` | state already changed, **not** rolled back; the remaining hooks still run; `AfterHookFailedException` (first in `getPrevious()`, all in `->failures`, context in `->context`); events they queued are dropped |
@@ -217,20 +218,48 @@ when a later one fails (use `stream()` to see each outcome).
 - **One process, one row:** `InMemoryStore`, `CallbackStore`, `PropertyStore` (`machineFor()`) are fine.
 - **Several processes, one row:** make the write conditional. `AtomicStateStore::compareAndSet($expected, $new)`
   (`AtomicCallbackStore`, or `machineFor(..., compareAndSet: fn ($expected, $new) => $repo->update(...) === 1)`).
-  The loser gets `ConcurrentTransitionException`; retry by sending again (it re-reads the state and re-plans).
-  If the reader lags behind the write (an entity property nobody updated), `AtomicCallbackStore` reports the state it
-  wrote; pass `afterWrite:` to keep the entity in step.
+  The loser gets `ConcurrentTransitionException` (`->retryable === true`). **Reload the entity before retrying**: the
+  machine re-reads the state through the store, and an entity property nobody refreshed still holds the old value, so
+  a retry would lose again. Pass `afterWrite:` to keep the entity in step with your own writes, and keep it free of
+  exceptions (the row has already changed when it runs).
+- **No `compareAndSet` is a read-then-write.** `PropertyStore`/`CallbackStore` cannot see another process: two workers
+  that both loaded `draft` can persist `review` and then `cancelled`, a path the definition does not allow. Use them
+  only when one process owns the row, and an atomic or locking store otherwise.
+- **A failed transaction does not roll the entity back.** With a `LockingStore` over `PropertyStore`/`CallbackStore`,
+  the write mutates the entity before COMMIT; if COMMIT fails the database rolls back but the entity (and
+  `$machine->state`) still show the new state. Refresh or discard the entity after a failure.
+- **Retrying and idempotency.** Treat exceptions by what they say about the state:
+  `ConcurrentTransitionException` (`->retryable`): not applied, reload and retry if true. `TransitionApplied`
+  (`AfterHookFailedException`, `ChainLimitExceededException`): applied, do **not** retry, handle the follow-up failure.
+  Refusals (`TransitionNotAllowedException`, `GuardRejectedException`): not applied; a webhook replayed after success
+  gets one of these, so de-duplicate by event id before sending if you must tell a replay from an invalid event.
 - **Guards that read more than the state** (a balance, a stock level): a compare-and-set on the status cannot notice
   those changing. Wrap the store in a `LockingStore` (any `TransactionalStateStore`): selection, guards, `before`/`onExit`
   hooks and the write run inside your transaction (`SELECT ... FOR UPDATE`), `onEnter`/`after` hooks after it returns.
 - **Side effects of `before`/`onExit` hooks** cannot be rolled back by the library: undo them in `abort` hooks
   (`->withAbort()`, `on(..., abort: ...)`), or do them in `onEnter`/`after` hooks (or an outbox) instead.
-- **Fibers** (Revolt/Amp, Swoole, FrankenPHP): a machine instance applies one transition at a time; a send from another
-  fiber meanwhile is refused instead of interleaving. Use one machine per request/fiber, and an atomic store for shared rows.
+- **Fibers** (Revolt/Amp, FrankenPHP): a machine instance applies one transition at a time; a send from another
+  fiber meanwhile is refused instead of interleaving. Use one machine per request/fiber, and an atomic store for shared rows. **Swoole coroutines are not PHP fibers**
+  and are not detected: do not share one machine between coroutines.
 - **Long-running workers:** a `Definition` and its guard/hook objects are shared by every machine; keep them stateless.
 
 States and events must be strings or **string-backed** enums; int-backed enums are rejected.
 Guards may run twice (`can()` then `send()`), so keep them side-effect free.
+
+## Compatibility promise
+
+Public (semver applies; behaviour counts too: hook order, exception types, concurrency semantics): `Machine`,
+`Definition`, `DefinitionBuilder`, `Transition`, `TransitionContext`, `TransitionResult`, `Blocker`, the `Contracts`
+interfaces, the stores, the guards, the exceptions and the helper functions (`machine`, `on`, `machineFor`, `allOf`, ...).
+Everything marked `@internal` (`Attempt`, `Refusal`, `Name`, `Diagram`, the `*Entries`/`listOf` helpers) may change in
+any release. Consumers should depend on `^3.0`. See `CHANGELOG.md`; security reports go through `SECURITY.md`.
+
+## Tests against a real database
+
+`tests/Integration` runs the concurrency claims above against SQLite (default) and, in CI, MySQL: two connections that
+loaded the same row, `UPDATE ... WHERE status = :expected`, a `LockingStore` over a real transaction with
+`SELECT ... FOR UPDATE`, rollback on a failing `before` hook, and MySQL's affected-rows semantics for self-loops.
+Point them at your own database with `DB_DSN`, `DB_USER`, `DB_PASS`.
 
 ## Performance and memory
 
