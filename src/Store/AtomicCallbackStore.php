@@ -23,6 +23,8 @@ use Dudas\StateMachine\Name;
  * When the reader cannot see a successful write yet (it still returns the state the write replaced, e.g. an
  * entity property nobody updated), the store reports the state it wrote, so the machine does not get stuck on
  * the old one. The next compareAndSet still checks the real stored value, so this never hides a race.
+ * Prefer `afterWrite` (or a reader that re-reads the row): it makes the cache unnecessary. `afterWrite` must not
+ * throw: the row has already changed by then.
  */
 final class AtomicCallbackStore implements AtomicStateStore
 {
@@ -75,14 +77,18 @@ final class AtomicCallbackStore implements AtomicStateStore
     public function compareAndSet(string $expected, string $state): bool
     {
         if (!($this->compareAndSet)($expected, $state)) {
+            // Somebody else wrote: whatever we remembered about our own write is out of date.
+            $this->written = null;
+
             return false;
         }
+
+        // Remember the write before afterWrite runs: if that throws, the row has moved all the same.
+        $this->written = $expected === $state ? null : [$expected, $state];
 
         if ($this->afterWrite !== null) {
             ($this->afterWrite)($state);
         }
-
-        $this->written = $expected === $state ? null : [$expected, $state];
 
         return true;
     }
