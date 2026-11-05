@@ -104,16 +104,14 @@ jobs:
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=state-machine
 
-      # Composer reads the export-ignore rules in .gitattributes; fail if a development file slips into the package.
+      # Composer reads the export-ignore rules in .gitattributes (and archive.exclude for untracked files such as
+      # composer.lock). Only the files below belong in the package: fail on anything else.
       - name: Check the package archive
         run: |
           unzip -Z1 dist/state-machine.zip > "$RUNNER_TEMP/archive.txt"
-          cat "$RUNNER_TEMP/archive.txt"
-          grep -qE '(^|/)src/Machine\.php$' "$RUNNER_TEMP/archive.txt"
-          dev='(^|/)(\.github|\.vscode|\.claude|bench|docs|examples|tests|vendor)/'
-          dev="$dev|(^|/)(AGENTS\.md|CLAUDE\.md|CONTRIBUTING\.md|mago\.toml|phpstan\.neon\.dist|phpunit\.xml\.dist|\.php-cs-fixer\.dist\.php)$"
-          if grep -E "$dev" "$RUNNER_TEMP/archive.txt"; then
-            echo "::error::development files in the package archive (see above)"; exit 1
+          grep -qx 'src/Machine.php' "$RUNNER_TEMP/archive.txt"
+          if grep -vxE 'src/(.+/)?|src/.+\.php|(CHANGELOG|README|SECURITY)\.md|LICENSE|composer\.json' "$RUNNER_TEMP/archive.txt"; then
+            echo "::error::unexpected files in the package archive (listed above)"; exit 1
           fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
