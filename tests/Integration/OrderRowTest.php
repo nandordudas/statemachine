@@ -118,8 +118,9 @@ final class OrderRowTest extends DatabaseTestCase
             $pdo->beginTransaction();
 
             try {
-                $row = $pdo->query('SELECT status FROM orders WHERE id = 1' . $lock)?->fetch();
-                $entity->status = is_array($row) && is_string($row['status'] ?? null) ? $row['status'] : '';
+                $locked = $pdo->query('SELECT status FROM orders WHERE id = 1' . $lock);
+                $status = $locked === false ? null : $locked->fetchColumn();
+                $entity->status = is_string($status) ? $status : '';
                 $result = $work();
                 $pdo->exec("UPDATE orders SET status = '" . $entity->status . "' WHERE id = 1");
                 $pdo->commit();
