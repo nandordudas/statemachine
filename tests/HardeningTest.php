@@ -101,7 +101,7 @@ final class HardeningTest extends TestCase
         } catch (GuardRejectedException) {
         }
 
-        self::assertSame('end', $log[array_key_last($log)], 'no guard may run after the transaction has ended');
+        self::assertSame('end', end($log), 'no guard may run after the transaction has ended');
         self::assertSame('begin', $log[0]);
     }
 
@@ -167,7 +167,7 @@ final class HardeningTest extends TestCase
         self::assertFalse(ConcurrentTransitionException::sendFromGuard('GO')->retryable);
         self::assertInstanceOf(LogicException::class, ConcurrentTransitionException::lostRace('a', 'b'));
 
-        self::assertTrue(is_subclass_of(ChainLimitExceededException::class, TransitionApplied::class));
+        self::assertContains(TransitionApplied::class, class_implements(ChainLimitExceededException::class));
 
         $definition = Definition::builder()
             ->initial('a')
@@ -224,6 +224,7 @@ final class HardeningTest extends TestCase
     {
         $this->expectException(InvalidDefinitionException::class);
 
+        /** @phpstan-ignore argument.type */
         machine('a', \stdClass::class, []);
     }
 

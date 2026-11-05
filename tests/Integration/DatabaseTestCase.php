@@ -61,11 +61,19 @@ abstract class DatabaseTestCase extends TestCase
         return str_starts_with($this->dsn(), 'sqlite:');
     }
 
-    protected function status(PDO $pdo, int $id = 1): string
+    protected function rowStatus(PDO $pdo, int $id = 1): string
     {
-        $status = $pdo->query('SELECT status FROM orders WHERE id = ' . $id)?->fetchColumn();
+        $status = $this->scalar($pdo, 'SELECT status FROM orders WHERE id = ' . $id);
 
         return is_string($status) ? $status : '';
+    }
+
+    protected function scalar(PDO $pdo, string $sql): mixed
+    {
+        $statement = $pdo->query($sql);
+        self::assertNotFalse($statement);
+
+        return $statement->fetchColumn();
     }
 
     private function dsn(): string
