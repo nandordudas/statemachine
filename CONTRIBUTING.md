@@ -7,3 +7,6 @@
   observe (hook order, exception types, what `send()` does under concurrency) counts as API.
 - Commits: conventional (`fix(machine): ...`), signed.
 - Never add a `conflict` or `replace` on `nandordudas/state-machine`, and never rename the package.
+- Releasing: merge a dated `## [X.Y.Z] - YYYY-MM-DD` entry in `CHANGELOG.md` (with a new empty `Unreleased` above it),
+  wait for CI on `main`, then run the **Release** workflow (Actions → Release → Run workflow) with `X.Y.Z`. It tags
+  `vX.Y.Z` and publishes the GitHub release with that entry as the notes.

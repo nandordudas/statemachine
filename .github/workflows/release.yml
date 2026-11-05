@@ -1,0 +1,80 @@
+name: Release
+
+# Tags a version on main and publishes its GitHub release, with the version's CHANGELOG.md section as the notes.
+# Merge the "## [X.Y.Z] - YYYY-MM-DD" entry first, wait for CI to pass on main, then run this from the Actions tab
+# (Release → Run workflow, branch main). Packagist picks the tag up through its GitHub webhook.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without the leading v, e.g. 3.0.1'
+        required: true
+        type: string
+
+permissions:
+  contents: write # push the tag, create the release
+  actions: read # check that CI passed on the commit
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release v${{ inputs.version }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check the version, the tag and the changelog
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$VERSION' is not a version like 3.0.1 (no leading v)"; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::v$VERSION is already tagged"; exit 1
+          fi
+          heading="## [$VERSION] - "
+          if ! grep -qE "^## \[${VERSION//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated '${heading}YYYY-MM-DD' entry"; exit 1
+          fi
+          # The section body: from below its heading to the next version heading or the link references.
+          awk -v h="$heading" 'index($0, h) == 1 { on = 1; next } on && /^(## \[|\[[^]]+\]: )/ { exit } on' CHANGELOG.md \
+            | sed -e '/./,$!d' > "$RUNNER_TEMP/notes.md"
+          if ! grep -q . "$RUNNER_TEMP/notes.md"; then
+            echo "::error::the CHANGELOG.md entry for $VERSION is empty"; exit 1
+          fi
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Check that CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          passed="$(gh run list --workflow ci.yml --commit "$sha" --status success --json databaseId --jq length)"
+          if [ "$passed" -eq 0 ]; then
+            echo "::error::CI has not passed on $sha yet; wait for it and run this again"; exit 1
+          fi
+
+      - name: Tag and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "refs/tags/v$VERSION"
+          flags=()
+          [[ "$VERSION" == *-* ]] && flags+=(--prerelease)
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
