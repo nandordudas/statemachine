@@ -7,6 +7,7 @@ paths = ["src", "tests"]
 includes = ["vendor"]
 
 [linter.rules]
+halstead = { enabled = false }
 literal-named-argument = { enabled = false }
 prefer-arrow-function = { enabled = false }
 function-name = { enabled = false }
