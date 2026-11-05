@@ -8,9 +8,10 @@ use Dudas\StateMachine\Definition;
 use Dudas\StateMachine\Examples\Document\DocumentEvent as E;
 use Dudas\StateMachine\Examples\Document\DocumentState as S;
 use Dudas\StateMachine\Machine;
-use Dudas\StateMachine\Store\CallbackStore;
 use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
+
+use function Dudas\StateMachine\machineFor;
 
 /**
  * Approval workflow over a {@see Document}:
@@ -24,8 +25,8 @@ use Dudas\StateMachine\TransitionContext;
  *    which rule failed, so `$flow->blockers(E::Approve, $payload)` can be shown to the user
  *  - transitions carry button labels in their metadata (shown in the diagram, readable by a UI)
  *  - `onExit(review)` clears the reviewer assignment; `onEnter(published)` notifies subscribers
- *  - the machine drives `$document->status` through a CallbackStore, so the entity stays the
- *    single source of truth (no separate state column to keep in sync).
+ *  - `machineFor()` drives the enum-typed `$document->status` directly, so the entity stays the
+ *    single source of truth (no separate state column to keep in sync, no enum conversion to write).
  */
 final class DocumentFlow
 {
@@ -63,15 +64,11 @@ final class DocumentFlow
      */
     public static function machineFor(Document $document, callable $notifySubscribers): Machine
     {
-        return new Machine(
-            self::definition($notifySubscribers, static function () use ($document): void {
-                $document->reviewer = null;
-            }),
-            new CallbackStore(static fn(): S => $document->status, static function (string $status) use (
-                $document,
-            ): void {
-                $document->status = S::from($status);
-            }),
-        );
+        $definition = self::definition($notifySubscribers, static function () use ($document): void {
+            $document->reviewer = null;
+        });
+
+        return machineFor($definition, $document); // reads and writes the enum-typed $document->status
+
     }
 }

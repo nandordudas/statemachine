@@ -16,12 +16,8 @@ final readonly class LocalPickupGuard implements Guard
 {
     public function allows(TransitionContext $context): bool
     {
-        $from = S::tryFrom($context->from);
-        $to = S::tryFrom($context->to);
-
-        if ($from === null || $to === null) {
-            return false;
-        }
+        $from = $context->fromAs(S::class);
+        $to = $context->toAs(S::class);
 
         if (($context->payload['localPickup'] ?? false) === true) {
             return (

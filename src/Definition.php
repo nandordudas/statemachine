@@ -233,6 +233,11 @@ final readonly class Definition
         return array_values(array_filter($this->states, static fn(string $s): bool => !isset($reached[$s])));
     }
 
+    /**
+     * Used by the machine; not part of the supported API.
+     *
+     * @internal
+     */
     public function hasState(string $state): bool
     {
         return isset($this->stateIndex[$state]);
@@ -246,6 +251,11 @@ final readonly class Definition
         return $this->eventNames;
     }
 
+    /**
+     * Used by the machine; not part of the supported API.
+     *
+     * @internal
+     */
     public function hasEvent(string $event): bool
     {
         return isset($this->byEvent[$event]);
@@ -265,6 +275,8 @@ final readonly class Definition
      * Events with at least one transition leaving `$state`, in definition order (guards not evaluated).
      *
      * @return list<string>
+     *
+     * @internal used by the machine; not part of the supported API
      */
     public function eventsFrom(string $state): array
     {
@@ -273,6 +285,8 @@ final readonly class Definition
 
     /**
      * @return list<Transition> in declaration order
+     *
+     * @internal not part of the supported API
      */
     public function transitionsFor(string $event): array
     {
@@ -281,6 +295,8 @@ final readonly class Definition
 
     /**
      * @return list<Hook>
+     *
+     * @internal used by the machine; not part of the supported API
      */
     public function enterHooksFor(string $state): array
     {
@@ -289,6 +305,8 @@ final readonly class Definition
 
     /**
      * @return list<Hook>
+     *
+     * @internal used by the machine; not part of the supported API
      */
     public function exitHooksFor(string $state): array
     {
