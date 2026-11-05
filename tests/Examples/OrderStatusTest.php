@@ -51,24 +51,27 @@ final class OrderStatusTest extends TestCase
         }
     }
 
+    /** @var array<string, string>|null the `status => group` map the legacy rule reads */
+    private static ?array $legacyGroups = null;
+
     /**
-     * The `status => group` map the legacy rule reads, built once for all 1,860 movements.
+     * Built once for all 1,860 movements.
      *
      * @return array<string, string>
      */
     private static function legacyGroups(): array
     {
-        static $groups = null;
-
-        if ($groups === null) {
+        if (self::$legacyGroups === null) {
             $groups = [];
 
             foreach (S::cases() as $status) {
                 $groups[$status->value] = $status->group()->value;
             }
+
+            self::$legacyGroups = $groups;
         }
 
-        return $groups;
+        return self::$legacyGroups;
     }
 
     #[DataProvider('everyMovement')]

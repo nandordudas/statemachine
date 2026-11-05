@@ -134,7 +134,7 @@ function hooksByState(array $entries): array
     foreach (stateEntries($entries) as [$state, $hooks]) {
         /** @var list<Hook|callable(TransitionContext): mixed> $list validated by Definition */
         $list = listOf($hooks);
-        $byState[$state] = [...$byState[$state] ?? [], ...$list];
+        $byState[$state] = [...($byState[$state] ?? []), ...$list];
     }
 
     return $byState;
@@ -156,7 +156,7 @@ function metaByState(array $entries): array
         }
 
         /** @var array<string, mixed> $meta */
-        $byState[$state] = [...$byState[$state] ?? [], ...$meta];
+        $byState[$state] = [...($byState[$state] ?? []), ...$meta];
     }
 
     return $byState;
