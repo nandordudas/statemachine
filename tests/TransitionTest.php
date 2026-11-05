@@ -11,7 +11,6 @@ use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
-
 final class TransitionTest extends TestCase
 {
     public function testNormalisesEnumsAndSingleSourceToStrings(): void

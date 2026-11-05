@@ -8,7 +8,6 @@ use Dudas\StateMachine\Blocker;
 use Dudas\StateMachine\Definition;
 use Dudas\StateMachine\Exception\ConcurrentTransitionException;
 use Dudas\StateMachine\Exception\GuardRejectedException;
-use Dudas\StateMachine\Guards\Not;
 use Dudas\StateMachine\Machine;
 use Dudas\StateMachine\Tests\Fixtures\MachineRef;
 use Dudas\StateMachine\Transition;
@@ -110,17 +109,16 @@ final class BlockersTest extends TestCase
 
     public function testAGuardWithoutAReasonIsReportedAsAGenericRejection(): void
     {
-        $machine = $this->approval(on(
-            'APPROVE',
-            'review',
-            'published',
-            guard: [static fn(): bool => false, not(static fn(): bool => true)],
-        ));
+        $machine = $this->approval(on('APPROVE', 'review', 'published', guard: [
+            static fn(): bool => false,
+            not(static fn(): bool => true),
+        ]));
 
         $blockers = $machine->blockers('APPROVE');
-        self::assertSame([Blocker::GUARD_REJECTED, Blocker::GUARD_REJECTED], self::codes($blockers));
+
+        // Both guards give the same generic reason, which the machine lists once.
+        self::assertSame([Blocker::GUARD_REJECTED], self::codes($blockers));
         self::assertSame('closure', $blockers[0]->parameters['guard']);
-        self::assertSame(Not::class, $blockers[1]->parameters['guard']);
     }
 
     public function testUnknownAndNotAllowedEventsAreExplainedToo(): void

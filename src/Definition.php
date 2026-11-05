@@ -47,7 +47,6 @@ final readonly class Definition
     /** @var array<string, list<Hook>> run before the machine leaves the state */
     private array $onExit;
 
-
     /**
      * @param string|BackedEnum $initial
      * @param list<string|BackedEnum> $states

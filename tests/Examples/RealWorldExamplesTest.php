@@ -113,10 +113,11 @@ final class RealWorldExamplesTest extends TestCase
         );
         self::assertSame(
             [DocumentEvent::Approve, DocumentEvent::Reject],
-            array_map(
-                DocumentEvent::from(...),
-                $flow->availableEvents(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
-            ),
+            array_map(DocumentEvent::from(...), $flow->availableEvents([
+                'role' => 'approver',
+                'actor' => 'bob',
+                'author' => 'ann',
+            ])),
         );
 
         $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);

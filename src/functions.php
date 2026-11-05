@@ -86,13 +86,7 @@ function machine(
     }
 
     return new Machine(
-        new Definition(
-            $initial,
-            $states,
-            $transitions,
-            hooksByState($onEnter),
-            hooksByState($onExit),
-        ),
+        new Definition($initial, $states, $transitions, hooksByState($onEnter), hooksByState($onExit)),
         $store,
         $history,
     );
