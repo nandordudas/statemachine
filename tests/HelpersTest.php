@@ -130,7 +130,7 @@ final class HelpersTest extends TestCase
     {
         $video = machine(VideoState::STOPPED, VideoState::class, [
             on(VideoEvent::PLAY, VideoState::STOPPED, VideoState::PLAYING),
-            on(VideoEvent::PAUSE, VideoState::PLAYING, VideoState::PAUSED),
+            on(VideoEvent::PAUSE, VideoState::PLAYING, VideoState::PAUSED)
         ]);
 
         self::assertSame(['stopped', 'playing', 'paused'], $video->definition->states);
