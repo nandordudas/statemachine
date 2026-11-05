@@ -5,6 +5,7 @@ paths = ["src", "examples", "tests"]
 includes = ["vendor"]
 
 [linter.rules]
+halstead = { enabled = false }
 literal-named-argument = { enabled = false }
 function-name = { enabled = false }
 no-isset = { enabled = false }
