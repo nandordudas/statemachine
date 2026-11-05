@@ -355,7 +355,7 @@ final class Machine implements StateMachine
         $this->owner = $caller;
 
         try {
-            $outcome = $this->step($event, $payload);
+            $outcome = $this->step($event, $payload, $mode);
 
             if ($this->queue !== []) {
                 $this->drain();
@@ -385,7 +385,7 @@ final class Machine implements StateMachine
                 throw ChainLimitExceededException::after($this->maxChainedEvents, $event);
             }
 
-            $outcome = $this->step($event, $payload);
+            $outcome = $this->step($event, $payload, $mode);
 
             if ($outcome instanceof Refusal) {
                 $this->refuse($outcome, $mode); // throws for a queued send(); otherwise the refusal is dropped
@@ -398,19 +398,29 @@ final class Machine implements StateMachine
      * when it has one; `onEnter`/`after` hooks run after it.
      *
      * @param array<string, mixed> $payload
+     * @param self::THROW|self::RESULT|self::QUIET $mode how a refusal will be reported (quiet needs no explanation)
      */
-    private function step(string $event, array $payload): TransitionContext|Refusal
+    private function step(string $event, array $payload, int $mode): TransitionContext|Refusal
     {
         $attempt = $this->attempt;
+        $explain = $mode !== self::QUIET;
+
+        // Whatever an earlier send left behind must not be compensated again if this one fails before it starts
+        // (the store cannot open its transaction, a lock times out).
+        $attempt->clear();
 
         try {
             $prepared = $this->store instanceof TransactionalStateStore
-                ? $this->store->transaction(fn(): Refusal|array => $this->prepare($event, $payload, $attempt))
-                : $this->prepare($event, $payload, $attempt);
+                ? $this->store->transaction(fn(): Refusal|array => $this->prepare($event, $payload, $attempt, $explain))
+                : $this->prepare($event, $payload, $attempt, $explain);
         } catch (Throwable $e) {
-            if ($attempt->transition !== null && $attempt->context !== null) {
-                foreach ($attempt->transition->abort as $hook) {
-                    $hook->handle($attempt->context);
+            $started = $attempt->transition;
+            $startedContext = $attempt->context;
+            $attempt->clear();
+
+            if ($started !== null && $startedContext !== null) {
+                foreach ($started->abort as $hook) {
+                    $hook->handle($startedContext);
                 }
             }
 
@@ -424,8 +434,7 @@ final class Machine implements StateMachine
         [$transition, $context] = $prepared;
 
         // Committed: nothing left to compensate, and the reused attempt must not keep the payload alive.
-        $attempt->transition = null;
-        $attempt->context = null;
+        $attempt->clear();
         $this->phase = self::FINISHING;
 
         if ($this->recordHistory !== false) {
@@ -466,10 +475,9 @@ final class Machine implements StateMachine
      * @param array<string, mixed> $payload
      * @return Refusal|array{Transition, TransitionContext} why the event was refused, or the applied transition
      */
-    private function prepare(string $event, array $payload, Attempt $attempt): Refusal|array
+    private function prepare(string $event, array $payload, Attempt $attempt, bool $explain): Refusal|array
     {
-        $attempt->transition = null;
-        $attempt->context = null;
+        $attempt->clear();
         $this->phase = self::SELECTING;
         $from = $this->store->get();
 
@@ -491,6 +499,9 @@ final class Machine implements StateMachine
                     ? Refusal::NOT_ALLOWED
                     : Refusal::GUARD_REJECTED,
                 $payload,
+                // Asked now, in the same pass and under the same lock that refused the event: asking later could
+                // see other data (or run a guard that throws) after the decision was taken.
+                $explain ? $this->guardBlockers($event, $from, $payload) : [],
             );
         }
 
@@ -513,6 +524,12 @@ final class Machine implements StateMachine
 
         if ($now !== $from) {
             throw ConcurrentTransitionException::forEvent($event, $from, $now);
+        }
+
+        // A self-loop changes nothing, so there is nothing to write (and an `UPDATE ... SET s = :s WHERE s = :s`
+        // reports zero affected rows on MySQL, which a compare-and-set would mistake for a lost race).
+        if ($from === $transition->to) {
+            return [$transition, $context];
         }
 
         if ($this->store instanceof AtomicStateStore) {
@@ -541,7 +558,7 @@ final class Machine implements StateMachine
             Refusal::GUARD_REJECTED => GuardRejectedException::forEvent(
                 $refusal->event,
                 $refusal->from,
-                $this->guardBlockers($refusal->event, $refusal->from, $refusal->payload),
+                $refusal->blockers,
             ),
             Refusal::NOT_ALLOWED => TransitionNotAllowedException::fromState($refusal->event, $refusal->from),
         };
