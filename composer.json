@@ -9,6 +9,12 @@
         "workflow",
         "xstate"
     ],
+    "homepage": "https://github.com/nandordudas/statemachine",
+    "support": {
+        "issues": "https://github.com/nandordudas/statemachine/issues",
+        "source": "https://github.com/nandordudas/statemachine",
+        "security": "https://github.com/nandordudas/statemachine/security/policy"
+    },
     "require": {
         "php": ">=8.5"
     },
@@ -41,7 +47,12 @@
         ]
     },
     "archive": {
-        "exclude": ["/vendor", "/tests", "/bench", "/preview", "/.github", "/.vscode", "/.claude", "/.editorconfig", "/AGENTS.md", "/CLAUDE.md", "/mago.toml", "/phpstan.neon.dist", "/phpunit.xml.dist", "/.php-cs-fixer.dist.php", "/dist"]
+        "exclude": ["/vendor", "/tests", "/bench", "/examples", "/preview", "/.github", "/.vscode", "/.claude", "/.archify", "/.editorconfig", "/.gitattributes", "/.gitignore", "/AGENTS.md", "/CLAUDE.md", "/CONTRIBUTING.md", "/mago.toml", "/phpstan.neon.dist", "/phpunit.xml.dist", "/.php-cs-fixer.dist.php", "/dist"]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "3.x-dev"
+        }
     },
     "config": {
         "sort-packages": true
