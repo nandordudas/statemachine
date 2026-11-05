@@ -78,7 +78,16 @@ function machine(
     int $maxChainedEvents = 100,
     array $stateMeta = [],
 ): Machine {
-    $states = is_string($states) ? $states::cases() : $states;
+    if (is_string($states)) {
+        if (!enum_exists($states) || !is_subclass_of($states, BackedEnum::class)) {
+            throw new InvalidDefinitionException(sprintf(
+                '"%s" is not a backed enum; pass a list of states instead.',
+                $states,
+            ));
+        }
+
+        $states = $states::cases();
+    }
 
     return new Machine(
         new Definition(
