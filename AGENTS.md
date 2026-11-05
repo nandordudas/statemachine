@@ -40,6 +40,7 @@ $doc->send(DocEvent::Submit);                      // throws on refusal
 $doc->tryTransition(DocEvent::Approve, $payload);  // TransitionResult: ok(), failure, state (refusals don't throw)
 $flow = machineFor($definition, $entity, 'status'); // state in a string/enum-typed property
 $doc->stateAs(DocState::class);                    // the current state as the enum ($doc->state is its name)
+$context->fromAs(DocState::class);                 // in a guard or hook: the source (toAs(): the target) as the enum
 ```
 
 Pipeline of `send()`: select transition (guards, first permitted wins) → `before` hooks → `onExit` hooks → store write

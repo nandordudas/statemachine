@@ -19,6 +19,7 @@ behaviour (hook order, exception types, concurrency semantics) is part of the AP
   `unreachableStates()`.
 - `Exception\TransitionApplied` marker (applied, do not retry), `ConcurrentTransitionException::$retryable`,
   `TransitionContext::fromAs()/toAs()`.
+- `StateMachine` (the interface) declares `stateAs()` and `blockers()` too.
 - `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes` (lean install archive), `extra.branch-alias`.
 
 ### Removed (to keep the library small; each has a short replacement)
@@ -33,6 +34,8 @@ behaviour (hook order, exception types, concurrency semantics) is part of the AP
 - `Definition::shortestPaths()` (internal to `unreachableStates()` now) and `machine(maxChainedEvents:)` (pass it to
   `new Machine(...)`).
 - The PHP 7.2 line (`php72` branch, `1.x`) is no longer maintained.
+- From the supported API (now `@internal`): `Definition::hasState()`, `hasEvent()`, `eventsFrom()`,
+  `transitionsFor()`, `enterHooksFor()`, `exitHooksFor()` and `PropertyStore::assertCanHold()`.
 
 ### Fixed
 - A refused event is explained in the same pass, under the same lock, that refused it.

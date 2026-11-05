@@ -56,6 +56,8 @@ final readonly class PropertyStore implements StateStore
      *
      * @param list<string> $states
      * @throws InvalidDefinitionException
+     *
+     * @internal the machine calls it when it is built; not part of the supported API
      */
     public function assertCanHold(array $states): void
     {

@@ -58,7 +58,8 @@ $video->tryTransition(E::Play)->ok();          // false: a refusal as a result i
 </picture>
 
 Name states and events with string-backed enums; every method takes them and no `->value` is needed. Plain strings
-work too (they are what a store holds).
+work too (they are what a store holds). Guards and hooks get the names in a `TransitionContext`; read them back as
+enums with `$context->fromAs(S::class)` and `$context->toAs(S::class)`.
 
 ## Shorthand
 
@@ -186,8 +187,9 @@ The diagrams and their sources are in [`docs/diagrams`](docs/diagrams/).
 Public (semver applies; behaviour counts too: hook order, exception types, concurrency semantics): `Machine`,
 `Definition`, `DefinitionBuilder`, `Transition`, `TransitionContext`, `TransitionResult`, `Blocker`, the `Contracts`
 interfaces, the stores, the guards, the exceptions and the helper functions (`machine`, `on`, `machineFor`, `allOf`, ...).
-Everything marked `@internal` (`Refusal`, `Name`, `Diagram`, the `*Entries`/`listOf` helpers) may change in any
-release. Depend on `^3.0`. See `CHANGELOG.md`; security reports go through `SECURITY.md`.
+Everything marked `@internal` (`Refusal`, `Name`, `Diagram`, the `*Entries`/`listOf` helpers, and the lookups the
+machine uses: `Definition::hasState()`, `hasEvent()`, `eventsFrom()`, `transitionsFor()`, `enterHooksFor()`,
+`exitHooksFor()`, `PropertyStore::assertCanHold()`) may change in any release. Depend on `^3.0`. See `CHANGELOG.md`; security reports go through `SECURITY.md`.
 
 ## Develop
 
