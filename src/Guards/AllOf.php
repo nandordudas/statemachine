@@ -23,6 +23,7 @@ final readonly class AllOf implements ExplainingGuard
         $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
     }
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return array_all($this->guards, static fn(Guard $guard): bool => $guard->allows($context));
@@ -31,6 +32,7 @@ final readonly class AllOf implements ExplainingGuard
     /**
      * Every inner guard that refuses, not only the first: a UI can list all that is missing.
      */
+    #[\Override]
     public function blockers(TransitionContext $context): array
     {
         $blockers = [];

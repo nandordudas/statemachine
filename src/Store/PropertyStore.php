@@ -77,6 +77,7 @@ final readonly class PropertyStore implements StateStore
         }
     }
 
+    #[\Override]
     public function get(): string
     {
         if (!$this->property->isInitialized($this->target)) {
@@ -100,6 +101,7 @@ final readonly class PropertyStore implements StateStore
         return Name::of($value);
     }
 
+    #[\Override]
     public function set(string $state): void
     {
         if ($this->enum === null) {

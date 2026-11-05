@@ -23,6 +23,7 @@ final readonly class AnyOf implements ExplainingGuard
         $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
     }
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return array_any($this->guards, static fn(Guard $guard): bool => $guard->allows($context));
@@ -31,6 +32,7 @@ final readonly class AnyOf implements ExplainingGuard
     /**
      * Nothing when one inner guard allows; otherwise the reasons of all of them.
      */
+    #[\Override]
     public function blockers(TransitionContext $context): array
     {
         $blockers = [];

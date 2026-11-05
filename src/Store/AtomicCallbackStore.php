@@ -42,6 +42,7 @@ final class AtomicCallbackStore implements AtomicStateStore
         private readonly ?Closure $afterWrite = null,
     ) {}
 
+    #[\Override]
     public function get(): string
     {
         $state = ($this->reader)();
@@ -65,6 +66,7 @@ final class AtomicCallbackStore implements AtomicStateStore
      * An unconditional write is not possible through a compare-and-set callback: this writes only if
      * nobody changed the state since it was read here, and throws otherwise.
      */
+    #[\Override]
     public function set(string $state): void
     {
         $expected = $this->get();
@@ -74,6 +76,7 @@ final class AtomicCallbackStore implements AtomicStateStore
         }
     }
 
+    #[\Override]
     public function compareAndSet(string $expected, string $state): bool
     {
         if (!($this->compareAndSet)($expected, $state)) {

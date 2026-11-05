@@ -21,6 +21,7 @@ final readonly class ClosureGuard implements Guard
         return $guard instanceof Guard ? $guard : new self(Closure::fromCallable($guard));
     }
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return (bool) ($this->callback)($context);

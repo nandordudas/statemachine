@@ -16,6 +16,7 @@ final readonly class PayloadIs implements Guard
         private mixed $expected,
     ) {}
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         $actual = $context->payload[$this->key] ?? null;

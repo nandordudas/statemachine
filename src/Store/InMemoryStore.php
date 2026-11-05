@@ -17,16 +17,19 @@ final class InMemoryStore implements AtomicStateStore
         $this->state = Name::of($state);
     }
 
+    #[\Override]
     public function get(): string
     {
         return $this->state;
     }
 
+    #[\Override]
     public function set(string $state): void
     {
         $this->state = $state;
     }
 
+    #[\Override]
     public function compareAndSet(string $expected, string $state): bool
     {
         if ($this->state !== $expected) {

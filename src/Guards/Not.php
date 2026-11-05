@@ -22,6 +22,7 @@ final readonly class Not implements ExplainingGuard
         $this->guard = ClosureGuard::wrap($guard);
     }
 
+    #[\Override]
     public function allows(TransitionContext $context): bool
     {
         return !$this->guard->allows($context);
@@ -30,6 +31,7 @@ final readonly class Not implements ExplainingGuard
     /**
      * The inner guard allowed, which gives no reason to show: wrap the Not in {@see Because} for a message.
      */
+    #[\Override]
     public function blockers(TransitionContext $context): array
     {
         return $this->allows($context) ? [] : [Explain::generic($this)];
