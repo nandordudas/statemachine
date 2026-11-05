@@ -13,7 +13,7 @@ use Dudas\StateMachine\Exception\InvalidDefinitionException;
  *
  * Guards, `before` and `after` hooks are added with the `with*` methods, each returning a new instance:
  *
- *     Transition::on('PLAY', ['stopped', 'paused'], 'playing')
+ *     Transition::on(VideoEvent::PLAY, [VideoState::STOPPED, VideoState::PAUSED], VideoState::PLAYING)
  *         ->withGuard(function (TransitionContext $c) { return $c->payload['user'] !== null; })
  *         ->withAfter(function (TransitionContext $c) use ($logger) { $logger->info($c->event); });
  *

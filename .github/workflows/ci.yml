@@ -3,7 +3,7 @@ name: CI
 # Builds and verifies both Composer packages of this repository:
 #   - nandordudas/state-machine 2.x (branch `main`,  PHP 8.5+)
 #   - nandordudas/state-machine 1.x (branch `php72`, PHP 7.2+)
-# Each matrix entry checks out its own branch, so a push to either branch verifies both.
+# A push or pull request verifies both lines: its own commit for the line it targets, the other branch as is.
 
 on:
   push:
@@ -33,9 +33,11 @@ jobs:
             ref: php72
             php: '7.2'
     steps:
+      # The line this run is about (push to it, or a pull request into it) tests the triggering commit;
+      # the other line is checked out from its branch so both packages stay verified.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ matrix.ref }}
+          ref: ${{ ((github.base_ref || github.ref_name) == 'php72') != (matrix.ref == 'php72') && matrix.ref || '' }}
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -47,21 +49,44 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output mago.tar.gz
+          gh release download --repo carthage-software/mago --pattern '*x86_64-unknown-linux-musl.tar.gz' --output "$RUNNER_TEMP/mago.tar.gz"
           mkdir -p "$HOME/.local/bin"
-          tar -xzf mago.tar.gz -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
+          tar -xzf "$RUNNER_TEMP/mago.tar.gz" -C "$HOME/.local/bin" --strip-components=1 --wildcards '*/mago'
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist --no-progress
 
+      # Each check runs even when an earlier one failed (the job still fails), so one run reports every problem.
       - run: mago --version
-      - run: mago fmt --check
-      - run: mago lint
-      - run: mago analyze
+      - name: mago fmt --check
+        run: mago fmt --check || { mago fmt --dry-run; exit 1; }
+      - if: ${{ !cancelled() }}
+        run: mago lint
+      - if: ${{ !cancelled() }}
+        run: mago analyze
 
-      - run: composer analyse
-      - run: composer test
+      - if: ${{ !cancelled() }}
+        run: composer analyse
+      - if: ${{ !cancelled() }}
+        run: composer test
+
+      # Informational: on a pull request the base branch is measured on the same runner, so the figures compare.
+      - name: Benchmark (informational)
+        if: ${{ !cancelled() && hashFiles('bench/run.php') != '' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          php -d zend.assertions=-1 bench/run.php 50000 | tee "$RUNNER_TEMP/head.txt"
+          # Compare only with this job's own line (a pull request into php72 is not measured against main).
+          [ "$BASE_REF" = "${{ matrix.ref }}" ] || exit 0
+          git fetch --quiet --depth=1 origin "$BASE_REF"
+          git worktree add --quiet "$RUNNER_TEMP/base" FETCH_HEAD
+          cp -r vendor "$RUNNER_TEMP/base/"
+          mkdir -p "$RUNNER_TEMP/base/bench" && cp bench/run.php bench/compare.php "$RUNNER_TEMP/base/bench/"
+          (cd "$RUNNER_TEMP/base" && composer dump-autoload --quiet)
+          php -d zend.assertions=-1 "$RUNNER_TEMP/base/bench/run.php" 50000 > "$RUNNER_TEMP/base.txt"
+          php bench/compare.php "$RUNNER_TEMP/base.txt" "$RUNNER_TEMP/head.txt"
 
       - name: Build package archive
         run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}

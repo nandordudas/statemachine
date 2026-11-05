@@ -10,9 +10,9 @@ use Dudas\StateMachine\Exception\InvalidDefinitionException;
  * Fluent assembly of a {@see Definition}:
  *
  *     $definition = Definition::builder()
- *         ->initial('stopped')
- *         ->states('playing', 'stopped', 'paused')
- *         ->transition(Transition::on('PLAY', ['stopped', 'paused'], 'playing'))
+ *         ->initial(VideoState::STOPPED)
+ *         ->states(...Name::constantsOf(VideoState::class))
+ *         ->transition(Transition::on(VideoEvent::PLAY, [VideoState::STOPPED, VideoState::PAUSED], VideoState::PLAYING))
  *         ->build();
  */
 final class DefinitionBuilder

@@ -7,7 +7,10 @@ namespace Dudas\StateMachine\Tests;
 use Dudas\StateMachine\Definition;
 use Dudas\StateMachine\Exception\InvalidDefinitionException;
 use Dudas\StateMachine\Exception\UnknownStateException;
+use Dudas\StateMachine\Name;
 use Dudas\StateMachine\Store\PropertyStore;
+use Dudas\StateMachine\Tests\Fixtures\VideoEvent;
+use Dudas\StateMachine\Tests\Fixtures\VideoState;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
@@ -121,5 +124,31 @@ final class HelpersTest extends TestCase
         };
         $this->expectException(UnknownStateException::class);
         (new PropertyStore($empty))->get();
+    }
+
+    public function testMachineListsTheStatesOfAConstantsClass(): void
+    {
+        $video = machine(VideoState::STOPPED, VideoState::class, [
+            on(VideoEvent::PLAY, VideoState::STOPPED, VideoState::PLAYING),
+            on(VideoEvent::PAUSE, VideoState::PLAYING, VideoState::PAUSED),
+        ]);
+
+        self::assertSame(['stopped', 'playing', 'paused'], $video->definition->states);
+        self::assertSame(VideoState::PAUSED, $video->send(VideoEvent::PLAY)->send(VideoEvent::PAUSE)->state());
+        self::assertSame(['PLAY', 'PAUSE', 'STOP'], Name::constantsOf(VideoEvent::class));
+    }
+
+    public function testConstantsOfRejectsAnUnknownClass(): void
+    {
+        $this->expectException(InvalidDefinitionException::class);
+
+        Name::constantsOf('No\\Such\\StateNames');
+    }
+
+    public function testConstantsOfRejectsAClassWithoutStringConstants(): void
+    {
+        $this->expectException(InvalidDefinitionException::class);
+
+        Name::constantsOf(\stdClass::class);
     }
 }
