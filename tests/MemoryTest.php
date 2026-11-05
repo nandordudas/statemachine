@@ -93,13 +93,10 @@ final class MemoryTest extends TestCase
             return static fn() => $machine->send('FLIP');
         }];
 
-        yield 'refusals through sendIfAllowed and tryTransition' => [static function (): Closure {
+        yield 'refusals through tryTransition' => [static function (): Closure {
             $machine = new Machine(self::toggle());
 
-            return static function () use ($machine): void {
-                $machine->sendIfAllowed('NOPE');
-                $machine->tryTransition('NOPE');
-            };
+            return static fn() => $machine->tryTransition('NOPE');
         }];
 
         yield 'refusal thrown by send' => [static function (): Closure {
@@ -135,15 +132,13 @@ final class MemoryTest extends TestCase
             };
         }];
 
-        yield 'failing before hook with abort hook' => [static function (): Closure {
+        yield 'failing before hook' => [static function (): Closure {
             $machine = new Machine(
                 new Definition(
                     'a',
                     ['a', 'b'],
                     [
-                        Transition::on('GO', 'a', 'b')->withBefore(
-                            static fn() => throw new \RuntimeException('no'),
-                        )->withAbort(static fn() => null),
+                        Transition::on('GO', 'a', 'b')->withBefore(static fn() => throw new \RuntimeException('no')),
                     ],
                 ),
             );
@@ -213,9 +208,7 @@ final class MemoryTest extends TestCase
                 ),
             );
 
-            return static function () use ($machine): void {
-                $machine->sendIfAllowed('FLIP');
-            };
+            return static fn() => $machine->tryTransition('FLIP');
         }];
 
         yield 'locking store' => [static function (): Closure {
@@ -225,15 +218,6 @@ final class MemoryTest extends TestCase
             ));
 
             return static fn() => $machine->send('FLIP');
-        }];
-
-        yield 'stream' => [static function (): Closure {
-            $machine = new Machine(self::toggle());
-
-            return static function () use ($machine): void {
-                foreach ($machine->stream(['FLIP', 'NOPE', 'FLIP']) as $result) {
-                }
-            };
         }];
 
         yield 'send from fibers, including a rejected concurrent one' => [static function (): Closure {
@@ -300,7 +284,7 @@ final class MemoryTest extends TestCase
         $probe = \WeakReference::create($payload);
 
         $machine->send('FLIP', ['order' => $payload]);
-        $machine->sendIfAllowed('NOPE', ['order' => $payload]);
+        $machine->tryTransition('NOPE', ['order' => $payload]);
         unset($payload);
 
         self::assertNull($probe->get(), 'nothing inside the machine still references the payload');

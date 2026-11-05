@@ -23,7 +23,7 @@ use function Dudas\StateMachine\on;
 require __DIR__ . '/../vendor/autoload.php';
 
 $n = (int) ($argv[1] ?? 50_000);
-$current = method_exists(Machine::class, 'stream'); // 2.x with stores, generators and bounded history
+$current = class_exists(LockingStore::class); // a version with locking stores and bounded history
 
 /**
  * @param Closure(int): mixed $body
@@ -74,7 +74,6 @@ $branching = new Machine(new Definition('a', ['a', 'b'], $branches));
 bench('send() picking 21st of 21 branches', $n, static fn() => $branching->send($branching->state === 'a' ? 'GO' : 'BACK'));
 
 $refuser = new Machine($toggle, new InMemoryStore('off'));
-bench('sendIfAllowed() refused (unknown event)', $n, static fn() => $refuser->sendIfAllowed('NOPE'));
 bench('tryTransition() refused (unknown event)', $n, static fn() => $refuser->tryTransition('NOPE'));
 bench('can()', $n, static fn() => $refuser->can('FLIP'));
 
@@ -123,11 +122,6 @@ bench('send() + 1 event chained from onEnter', $n, static fn() => $ref->machine-
 if ($current) {
     $history = new Machine($toggle, recordHistory: 100);
     bench('send() with history: 100', $n, static fn() => $history->send('FLIP'));
-
-    bench('stream() 10 events', (int) ($n / 10), static function () use ($toggle): void {
-        foreach (new Machine($toggle)->stream(array_fill(0, 10, 'FLIP')) as $result) {
-        }
-    });
 }
 
 bench('sendAll() 10 events', (int) ($n / 10), static function () use ($toggle): void {

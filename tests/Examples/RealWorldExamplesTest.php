@@ -14,7 +14,6 @@ use Dudas\StateMachine\Examples\Payment\PaymentFlow;
 use Dudas\StateMachine\Examples\Payment\PaymentState as S;
 use Dudas\StateMachine\Exception\GuardRejectedException;
 use Dudas\StateMachine\Store\AtomicCallbackStore;
-use Dudas\StateMachine\Transition;
 use Dudas\StateMachine\TransitionContext;
 use PHPUnit\Framework\TestCase;
 
@@ -113,13 +112,12 @@ final class RealWorldExamplesTest extends TestCase
             'the guard says which rules fail',
         );
         self::assertSame(
-            ['Approve', 'Send back'],
+            [DocumentEvent::Approve, DocumentEvent::Reject],
             array_map(
-                static fn(Transition $transition): mixed => $transition->meta['label'] ?? null,
-                $flow->availableTransitions(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
+                DocumentEvent::from(...),
+                $flow->availableEvents(['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']),
             ),
         );
-        self::assertSame('In review', $flow->definition->metaFor(DocumentState::Review)['label'] ?? null);
 
         $flow->send(DocumentEvent::Approve, ['role' => 'approver', 'actor' => 'bob', 'author' => 'ann']);
 

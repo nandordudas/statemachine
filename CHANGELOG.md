@@ -14,16 +14,27 @@ behaviour (hook order, exception types, concurrency semantics) is part of the AP
 - `AfterHookFailedException` runs every remaining hook and carries all failures.
 
 ### Added
-- Blockers (`Machine::blockers()`, `because()`, `Blocker`), transition and state metadata, abort hooks, `LockingStore`
-  and `TransactionalStateStore`, `PropertyStore`, `Machine::stateAs()`, `stream()`, `drive()`, bounded history,
-  diagrams and `unreachableStates()`.
+- Blockers (`Machine::blockers()`, `because()`, `Blocker`), transition metadata, `LockingStore` and
+  `TransactionalStateStore`, `PropertyStore`, `Machine::stateAs()`, bounded history, diagrams and
+  `unreachableStates()`.
 - `Exception\TransitionApplied` marker (applied, do not retry), `ConcurrentTransitionException::$retryable`,
   `TransitionContext::fromAs()/toAs()`.
 - `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, `.gitattributes` (lean install archive), `extra.branch-alias`.
 
+### Removed (to keep the library small; each has a short replacement)
+- `Machine::sendIfAllowed()`: use `tryTransition($event)->ok()`.
+- `Machine::stream()` and `Machine::drive()`: loop over your events and call `tryTransition()`.
+- `Machine::availableTransitions()`: use `availableEvents()`, and `$definition->transitionsFrom()` for metadata.
+- Abort hooks (`Transition::withAbort()`, `on(abort:)`): do side effects in `onEnter`/`after` hooks, or run the
+  transition in a `LockingStore` transaction so a failure rolls back.
+- State metadata (`DefinitionBuilder::meta()`, `Definition::metaFor()`, `machine(stateMeta:)`) and state labels in
+  diagrams; transition metadata stays.
+- The `meta['blocked']` fallback message: wrap the guard in `because()` instead.
+- `Definition::shortestPaths()` (internal to `unreachableStates()` now) and `machine(maxChainedEvents:)` (pass it to
+  `new Machine(...)`).
+- The PHP 7.2 line (`php72` branch, `1.x`) is no longer maintained.
+
 ### Fixed
-- A failure before a transition started no longer re-runs the abort hooks of an earlier transition (and no longer
-  keeps its payload alive).
 - A refused event is explained in the same pass, under the same lock, that refused it.
 - `AtomicCallbackStore` forgets its remembered write after a lost race (a worker could stay wedged).
 - `PropertyStore` reports an uninitialized typed property as `UnknownStateException`.

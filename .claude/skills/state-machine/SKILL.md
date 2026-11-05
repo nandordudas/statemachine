@@ -13,7 +13,7 @@ something because it happened). Draw it: `$definition->toMermaid()`.
 
 Use string-backed enums for states and events (`enum DocState: string`), one file each. Pass the enums
 everywhere; `->value` is never needed: read the state back with `$machine->stateAs(DocState::class)`, give
-`machine(onEnter:/onExit:/stateMeta:)` `[state, value]` pairs, and seed an `InMemoryStore` with an enum.
+`machine(onEnter:/onExit:)` `[state, hook]` pairs, and seed an `InMemoryStore` with an enum.
 
 ## 2. Build
 
@@ -43,27 +43,21 @@ update the entity). When guards read other columns too, wrap the store in a `Loc
 
 ## 4. Drive it
 
-`send()` throws; `sendIfAllowed()`/`tryTransition()` swallow only refusals. Catch `StateMachineException` for all
-library errors. Pass data via the payload array, read in guards/hooks through `TransitionContext`. Prefer
-`tryTransition()` over `can()` + `send()` (racy). For many events use `stream()` (yields results) or `drive()` (a
-generator process that receives each result).
+`send()` throws; `tryTransition()` returns refusals as a result (`->ok()`, `->failure`) and throws only for hook and
+concurrency failures. Catch `StateMachineException` for all library errors. Pass data via the payload array, read in
+guards/hooks through `TransitionContext`. Prefer `tryTransition()` over `can()` + `send()` (racy); `sendAll()` sends
+several events in order.
 
 ## Rules of thumb
 
 - Guards: pure and cheap. Combine with `allOf`, `anyOf`, `not`, `payloadIs`, `payloadsEqual`, or a named `Guard` class
   when the rule is reused (see `examples/Document/ApproverGuard.php`).
 - When users need to know *why* they can't do something, explain the guards: `because($guard, 'message', code: '...')`
-  or an `ExplainingGuard` class, then show `$machine->blockers($event, $payload)`. Put labels, styles and the
-  `blocked` message in `meta` and render buttons from `availableTransitions()`.
+  or an `ExplainingGuard` class, then show `$machine->blockers($event, $payload)`. Put labels in transition `meta`.
 - Side effects go in hooks. `before`/`onExit` can veto; `onEnter`/`after` run after the write and failures are wrapped
   in `AfterHookFailedException` (no rollback).
 - Never call `send()` inside guards or `before`/`onExit` (`ConcurrentTransitionException`); from `onEnter`/`after` it is
   queued and applied once the current transition has finished (cycles stop at `maxChainedEvents`).
-- Side effects of `before`/`onExit` that must be undone when the transition fails go in `abort` hooks (`->withAbort()`).
+- Side effects that must not happen when the transition fails belong in `onEnter`/`after`, not in `before`/`onExit`.
 - Check structure with `$definition->unreachableStates()`.
 - Worked examples: `examples/Payment`, `examples/Document`, `examples/OrderStatus`.
-
-## PHP 7.2 projects
-
-The `1.x` line of the same package (branch `php72`) supports PHP 7.2 to 8.4 with plain-string states and no named
-arguments. `composer require nandordudas/state-machine` picks the right line automatically; pin `^1.0` to force it.

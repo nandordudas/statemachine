@@ -33,8 +33,6 @@ final class DefinitionBuilder
     /** @var array<string, list<Hook>> */
     private array $onExit = [];
 
-    /** @var array<string, array<string, mixed>> */
-    private array $stateMeta = [];
 
     public function initial(string|BackedEnum $state): self
     {
@@ -86,19 +84,6 @@ final class DefinitionBuilder
         return $this;
     }
 
-    /**
-     * Metadata for `$state`, merged with what was given before: `->meta(S::Review, ['label' => 'In review'])`.
-     *
-     * @param array<string, mixed> $meta
-     */
-    public function meta(string|BackedEnum $state, array $meta): self
-    {
-        $name = Name::of($state);
-        $this->stateMeta[$name] = [...($this->stateMeta[$name] ?? []), ...$meta];
-
-        return $this;
-    }
-
     public function build(): Definition
     {
         return new Definition(
@@ -107,7 +92,6 @@ final class DefinitionBuilder
             $this->transitions,
             $this->onEnter,
             $this->onExit,
-            $this->stateMeta,
         );
     }
 }

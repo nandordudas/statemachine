@@ -21,16 +21,14 @@ use Dudas\StateMachine\Store\InMemoryStore;
 use Dudas\StateMachine\Store\PropertyStore;
 use Exception;
 use Fiber;
-use Generator;
 use LogicException;
-use Throwable;
 
 /**
  * Runtime instance of a {@see Definition}. The current state lives in a {@see StateStore},
  * so the machine can drive an in-memory value or state owned by a domain object.
  *
  * Sending an event runs: guards → `before` hooks → `onExit` hooks → store write → `onEnter` hooks → `after` hooks.
- * A failing guard, `before` or `onExit` hook leaves the state untouched (and runs the transition's `abort` hooks).
+ * A failing guard, `before` or `onExit` hook leaves the state untouched.
  * A failing `onEnter`/`after` hook does not roll the state back and surfaces as {@see AfterHookFailedException}.
  *
  * Transitions run to completion: an event sent from an `onEnter`/`after` hook is queued and applied once every
@@ -49,21 +47,16 @@ final class Machine implements StateMachine
     /** `onEnter`/`after` hooks, and events chained from them. */
     private const string FINISHING = 'finishing';
 
-    /** How a refusal is reported: thrown (send), returned (tryTransition) or only as false (sendIfAllowed). */
+    /** How a refusal is reported: thrown (send) or returned (tryTransition). */
     private const int THROW = 0;
 
     private const int RESULT = 1;
-
-    private const int QUIET = 2;
 
     public string $state {
         get => $this->store->get();
     }
 
     private readonly StateStore $store;
-
-    /** Reused by every step: steps never overlap, and reuse saves an allocation per send. */
-    private readonly Attempt $attempt;
 
     private string $phase = self::IDLE;
 
@@ -73,7 +66,7 @@ final class Machine implements StateMachine
     /** @var array<int, int> guard evaluations by can()/availableEvents() in progress, by caller */
     private array $evaluating = [];
 
-    /** @var list<array{string, array<string, mixed>, self::THROW|self::RESULT|self::QUIET}> events sent from hooks */
+    /** @var list<array{string, array<string, mixed>, self::THROW|self::RESULT}> events sent from hooks */
     private array $queue = [];
 
     /** @var array<int, TransitionContext> a ring buffer when the history is bounded */
@@ -99,7 +92,6 @@ final class Machine implements StateMachine
         }
 
         $this->store = $store ?? new InMemoryStore($definition->initial);
-        $this->attempt = new Attempt();
 
         if ($this->store instanceof PropertyStore) {
             $this->store->assertCanHold($definition->states);
@@ -160,32 +152,9 @@ final class Machine implements StateMachine
     }
 
     /**
-     * Like {@see availableEvents()}, but the transitions themselves (the first permitted one per event), so a UI
-     * can read their `meta` (labels, styles) to render buttons.
-     *
-     * @param array<string, mixed> $payload
-     * @return list<Transition>
-     */
-    public function availableTransitions(array $payload = []): array
-    {
-        $from = $this->state;
-        $available = [];
-
-        foreach ($this->definition->eventsFrom($from) as $event) {
-            $transition = $this->select($event, $from, $payload);
-
-            if ($transition !== null) {
-                $available[] = $transition;
-            }
-        }
-
-        return $available;
-    }
-
-    /**
      * Why `$event` cannot be sent right now; empty when it can. Unlike {@see can()} it asks every guard, so each
-     * reason is listed. Messages come from {@see because()} or a {@see Contracts\ExplainingGuard}; a guard that
-     * gives none gets the transition's `meta['blocked']` message.
+     * reason is listed. Messages come from {@see because()} or an {@see Contracts\ExplainingGuard}; a guard that
+     * gives none is reported as {@see Blocker::GUARD_REJECTED}.
      *
      *     foreach ($order->blockers(E::Ship, $payload) as $blocker) {
      *         $flash->warning($blocker->message);
@@ -233,59 +202,17 @@ final class Machine implements StateMachine
     }
 
     /**
-     * Not atomic: events applied before a failing one stay applied. Use {@see stream()} to see each outcome.
+     * Not atomic: events applied before a failing one stay applied.
      */
     public function sendAll(iterable $events): static
     {
         foreach ($events as $item) {
-            [$event, $payload] = self::item($item);
+            [$event, $payload] = is_array($item) ? [$item[0], $item[1] ?? []] : [$item, []];
 
             $this->dispatch(Name::of($event), $payload, self::THROW);
         }
 
         return $this;
-    }
-
-    /**
-     * Lazily tries each event in order and yields its {@see TransitionResult}; refusals do not stop the stream.
-     * Works with endless sources (a queue consumer): stop iterating to stop sending.
-     *
-     * @param iterable<string|BackedEnum|array{0: string|BackedEnum, 1?: array<string, mixed>}> $events
-     * @return Generator<int, TransitionResult, mixed, void>
-     */
-    public function stream(iterable $events): Generator
-    {
-        foreach ($events as $item) {
-            [$event, $payload] = self::item($item);
-
-            yield $this->tryTransition($event, $payload);
-        }
-    }
-
-    /**
-     * Runs a process written as a generator: it yields events (or `[event, payload]`) and receives the
-     * {@see TransitionResult} of each one, so multi-step flows can branch on outcomes without nesting hooks.
-     *
-     *     $machine->drive((function () {
-     *         $result = yield E::Submit;
-     *         if ($result->ok()) {
-     *             yield [E::Approve, ['role' => 'approver']];
-     *         }
-     *     })());
-     *
-     * @template R
-     * @param Generator<mixed, string|BackedEnum|array{0: string|BackedEnum, 1?: array<string, mixed>}, TransitionResult, R> $process
-     * @return R the generator's return value
-     */
-    public function drive(Generator $process): mixed
-    {
-        while ($process->valid()) {
-            [$event, $payload] = self::item($process->current());
-
-            $process->send($this->tryTransition($event, $payload));
-        }
-
-        return $process->getReturn();
     }
 
     /**
@@ -306,11 +233,6 @@ final class Machine implements StateMachine
         ];
     }
 
-    public function sendIfAllowed(string|BackedEnum $event, array $payload = []): bool
-    {
-        return $this->dispatch(Name::of($event), $payload, self::QUIET) !== false;
-    }
-
     public function tryTransition(string|BackedEnum $event, array $payload = []): TransitionResult
     {
         $result = $this->dispatch(Name::of($event), $payload, self::RESULT);
@@ -323,9 +245,9 @@ final class Machine implements StateMachine
      * `onEnter`/`after` hooks, and drains that queue in a loop (no recursion, bounded length).
      *
      * @param array<string, mixed> $payload
-     * @param self::THROW|self::RESULT|self::QUIET $mode how to report a refusal
-     * @return TransitionResult|bool a TransitionResult in result mode; otherwise whether the event was applied
-     *                               (or queued)
+     * @param self::THROW|self::RESULT $mode how to report a refusal
+     * @return TransitionResult|bool a TransitionResult in result mode; otherwise true (the event was applied
+     *                               or queued)
      */
     private function dispatch(string $event, array $payload, int $mode): TransitionResult|bool
     {
@@ -355,7 +277,7 @@ final class Machine implements StateMachine
         $this->owner = $caller;
 
         try {
-            $outcome = $this->step($event, $payload, $mode);
+            $outcome = $this->step($event, $payload);
 
             if ($this->queue !== []) {
                 $this->drain();
@@ -385,10 +307,10 @@ final class Machine implements StateMachine
                 throw ChainLimitExceededException::after($this->maxChainedEvents, $event);
             }
 
-            $outcome = $this->step($event, $payload, $mode);
+            $outcome = $this->step($event, $payload);
 
             if ($outcome instanceof Refusal) {
-                $this->refuse($outcome, $mode); // throws for a queued send(); otherwise the refusal is dropped
+                $this->refuse($outcome, $mode); // throws for a queued send(); a queued try's refusal is dropped
             }
         }
     }
@@ -398,43 +320,18 @@ final class Machine implements StateMachine
      * when it has one; `onEnter`/`after` hooks run after it.
      *
      * @param array<string, mixed> $payload
-     * @param self::THROW|self::RESULT|self::QUIET $mode how a refusal will be reported (quiet needs no explanation)
      */
-    private function step(string $event, array $payload, int $mode): TransitionContext|Refusal
+    private function step(string $event, array $payload): TransitionContext|Refusal
     {
-        $attempt = $this->attempt;
-        $explain = $mode !== self::QUIET;
-
-        // Whatever an earlier send left behind must not be compensated again if this one fails before it starts
-        // (the store cannot open its transaction, a lock times out).
-        $attempt->clear();
-
-        try {
-            $prepared = $this->store instanceof TransactionalStateStore
-                ? $this->store->transaction(fn(): Refusal|array => $this->prepare($event, $payload, $attempt, $explain))
-                : $this->prepare($event, $payload, $attempt, $explain);
-        } catch (Throwable $e) {
-            $started = $attempt->transition;
-            $startedContext = $attempt->context;
-            $attempt->clear();
-
-            if ($started !== null && $startedContext !== null) {
-                foreach ($started->abort as $hook) {
-                    $hook->handle($startedContext);
-                }
-            }
-
-            throw $e;
-        }
+        $prepared = $this->store instanceof TransactionalStateStore
+            ? $this->store->transaction(fn(): Refusal|array => $this->prepare($event, $payload))
+            : $this->prepare($event, $payload);
 
         if ($prepared instanceof Refusal) {
             return $prepared;
         }
 
         [$transition, $context] = $prepared;
-
-        // Committed: nothing left to compensate, and the reused attempt must not keep the payload alive.
-        $attempt->clear();
         $this->phase = self::FINISHING;
 
         if ($this->recordHistory !== false) {
@@ -469,15 +366,13 @@ final class Machine implements StateMachine
     }
 
     /**
-     * Selects the transition, runs `before`/`onExit` hooks and writes the new state. Progress is recorded
-     * in `$attempt`, so a failure part way can still be compensated.
+     * Selects the transition, runs `before`/`onExit` hooks and writes the new state.
      *
      * @param array<string, mixed> $payload
      * @return Refusal|array{Transition, TransitionContext} why the event was refused, or the applied transition
      */
-    private function prepare(string $event, array $payload, Attempt $attempt, bool $explain): Refusal|array
+    private function prepare(string $event, array $payload): Refusal|array
     {
-        $attempt->clear();
         $this->phase = self::SELECTING;
         $from = $this->store->get();
 
@@ -501,14 +396,12 @@ final class Machine implements StateMachine
                 $payload,
                 // Asked now, in the same pass and under the same lock that refused the event: asking later could
                 // see other data (or run a guard that throws) after the decision was taken.
-                $explain ? $this->guardBlockers($event, $from, $payload) : [],
+                $this->guardBlockers($event, $from, $payload),
             );
         }
 
         $this->phase = self::PREPARING;
         $context = $transition->contextFor($from, $payload);
-        $attempt->transition = $transition;
-        $attempt->context = $context;
 
         foreach ($transition->before as $hook) {
             $hook->handle($context);
@@ -544,15 +437,10 @@ final class Machine implements StateMachine
     }
 
     /**
-     * @param self::THROW|self::RESULT|self::QUIET $mode
+     * @param self::THROW|self::RESULT $mode
      */
-    private function refuse(Refusal $refusal, int $mode): TransitionResult|false
+    private function refuse(Refusal $refusal, int $mode): TransitionResult
     {
-        if ($mode === self::QUIET) {
-            return false;
-        }
-
-        // Built here, only when someone gets to see it: a refused sendIfAllowed() never pays for a stack trace.
         $exception = match ($refusal->reason) {
             Refusal::UNKNOWN_EVENT => UnknownEventException::named($refusal->event),
             Refusal::GUARD_REJECTED => GuardRejectedException::forEvent(
@@ -639,15 +527,6 @@ final class Machine implements StateMachine
         }
 
         return null;
-    }
-
-    /**
-     * @param string|BackedEnum|array{0: string|BackedEnum, 1?: array<string, mixed>} $item
-     * @return array{string|BackedEnum, array<string, mixed>}
-     */
-    private static function item(string|BackedEnum|array $item): array
-    {
-        return is_array($item) ? [$item[0], $item[1] ?? []] : [$item, []];
     }
 
     /** 0 for the main program, otherwise the id of the running fiber. */

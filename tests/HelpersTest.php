@@ -6,7 +6,6 @@ namespace Dudas\StateMachine\Tests;
 
 use Closure;
 use Dudas\StateMachine\Definition;
-use Dudas\StateMachine\Exception\InvalidDefinitionException;
 use Dudas\StateMachine\Exception\UnknownStateException;
 use Dudas\StateMachine\Machine;
 use Dudas\StateMachine\Store\InMemoryStore;
@@ -73,7 +72,7 @@ final class HelpersTest extends TestCase
         self::assertSame('published', new Machine($definition)->send('SUBMIT')->send('APPROVE')->state);
     }
 
-    public function testStateHooksAndMetaTakeEnumPairs(): void
+    public function testStateHooksTakeEnumPairs(): void
     {
         $log = [];
         $hook = static function (string $entry) use (&$log): Closure {
@@ -87,20 +86,11 @@ final class HelpersTest extends TestCase
             transitions: [on(E::Play, S::Stopped, S::Playing), on(E::Stop, S::Playing, S::Stopped)],
             onEnter: [[S::Playing, $hook('enter:playing')], [S::Playing, [$hook('enter:again')]]],
             onExit: [[S::Playing, $hook('exit:playing')]],
-            stateMeta: [[S::Playing, ['label' => 'Playing']], [S::Playing, ['color' => 'green']]],
         );
 
         $video->send(E::Play)->send(E::Stop);
 
         self::assertSame(['enter:playing', 'enter:again', 'exit:playing'], $log);
-        self::assertSame(['label' => 'Playing', 'color' => 'green'], $video->definition->metaFor(S::Playing));
-    }
-
-    public function testStateMetaMustBeAnArray(): void
-    {
-        $this->expectException(InvalidDefinitionException::class);
-
-        machine(initial: S::Stopped, states: S::class, transitions: [], stateMeta: [[S::Playing, 'not an array']]);
     }
 
     public function testTheStateCanBeReadAsAnEnum(): void

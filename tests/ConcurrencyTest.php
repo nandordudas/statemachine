@@ -81,40 +81,6 @@ final class ConcurrencyTest extends TestCase
         }
     }
 
-    public function testAbortHooksCompensateWhenABeforeOrExitHookFails(): void
-    {
-        $aborted = [];
-        $compensate = static function (TransitionContext $c) use (&$aborted): void {
-            $aborted[] = $c->event;
-        };
-        $definition = Definition::builder()
-            ->initial('a')
-            ->states('a', 'b')
-            ->onExit('a', static fn() => throw new \RuntimeException('exit failed'))
-            ->transition(
-                Transition::on('GO', 'a', 'b')->withAbort($compensate),
-                Transition::on('VETOED', 'a', 'b')->withGuard(static fn(): bool => false)->withAbort($compensate),
-            )
-            ->build();
-        $machine = new Machine($definition);
-
-        try {
-            $machine->send('GO');
-            self::fail('Expected the exit hook failure.');
-        } catch (\RuntimeException $e) {
-            self::assertSame('exit failed', $e->getMessage(), 'the original failure propagates');
-        }
-
-        try {
-            $machine->send('VETOED');
-            self::fail('Expected a guard rejection.');
-        } catch (GuardRejectedException) {
-        }
-
-        self::assertSame(['GO'], $aborted, 'a refusal never started the transition, so nothing to compensate');
-        self::assertSame('a', $machine->state);
-    }
-
     public function testInterleavedWorkersOnOneRowLetOnlyOneWin(): void
     {
         $row = ['status' => 'a'];
@@ -130,14 +96,11 @@ final class ConcurrencyTest extends TestCase
                 return true;
             });
         };
-        $aborted = false;
         $workerA = new Machine($this->abc(Transition::on('GO', 'a', 'b')), $store());
         // B has planned GO and is in its before hook when A applies OTHER on the same row.
         $workerB = new Machine(
             $this->abc(Transition::on('GO', 'a', 'b')->withBefore(static function () use ($workerA): void {
                 $workerA->send('OTHER');
-            })->withAbort(static function () use (&$aborted): void {
-                $aborted = true;
             })),
             $store(),
         );
@@ -149,7 +112,6 @@ final class ConcurrencyTest extends TestCase
         }
 
         self::assertSame('c', $row['status']);
-        self::assertTrue($aborted);
     }
 
     public function testAtomicStoreWithAReaderThatLagsBehindDoesNotGetStuck(): void
@@ -235,12 +197,11 @@ final class ConcurrencyTest extends TestCase
         self::assertSame('b', $store->get());
     }
 
-    public function testLockingStoreRollsBackAndAbortsWhenTheWorkFails(): void
+    public function testLockingStoreRollsBackWhenTheWorkFails(): void
     {
         $transaction = new class {
             public bool $rolledBack = false;
         };
-        $aborted = false;
         $inner = new InMemoryStore('a');
         $store = new LockingStore($inner, static function (\Closure $work) use ($transaction): mixed {
             try {
@@ -255,11 +216,7 @@ final class ConcurrencyTest extends TestCase
             'a',
             ['a', 'b'],
             [
-                Transition::on('GO', 'a', 'b')->withBefore(
-                    static fn() => throw new \RuntimeException('no'),
-                )->withAbort(static function () use (&$aborted): void {
-                    $aborted = true;
-                }),
+                Transition::on('GO', 'a', 'b')->withBefore(static fn() => throw new \RuntimeException('no')),
             ],
         );
 
@@ -270,7 +227,6 @@ final class ConcurrencyTest extends TestCase
         }
 
         self::assertTrue($transaction->rolledBack);
-        self::assertTrue($aborted);
         self::assertSame('a', $inner->get());
     }
 

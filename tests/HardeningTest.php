@@ -30,49 +30,6 @@ use function Dudas\StateMachine\machine;
 
 final class HardeningTest extends TestCase
 {
-    public function testAbortHooksOfAnEarlierSendAreNotRunAgainWhenALaterSendFailsBeforeItStarts(): void
-    {
-        $aborts = 0;
-        $calls = 0;
-        $definition = Definition::builder()
-            ->initial('a')
-            ->states('a', 'b')
-            ->transition(
-                Transition::on('BOOM', 'a', 'b')->withBefore(static function (): void {
-                    throw new RuntimeException('before failed');
-                })->withAbort(static function () use (&$aborts): void {
-                    $aborts++;
-                }),
-                Transition::on('GO', 'a', 'b'),
-            )
-            ->build();
-        $store = new LockingStore(new InMemoryStore('a'), static function (Closure $work) use (&$calls): mixed {
-            if (++$calls === 2) {
-                throw new RuntimeException('BEGIN failed');
-            }
-
-            return $work();
-        });
-        $machine = new Machine($definition, $store);
-
-        try {
-            $machine->send('BOOM');
-            self::fail('Expected the before hook to fail.');
-        } catch (RuntimeException $e) {
-            self::assertSame('before failed', $e->getMessage());
-        }
-        self::assertSame(1, $aborts);
-
-        try {
-            $machine->send('GO');
-            self::fail('Expected the transaction to fail.');
-        } catch (RuntimeException $e) {
-            self::assertSame('BEGIN failed', $e->getMessage());
-        }
-
-        self::assertSame(1, $aborts, 'a transition that never started must not be compensated');
-    }
-
     public function testRefusalIsExplainedInsideTheTransactionNotAfterIt(): void
     {
         $log = [];
@@ -103,27 +60,6 @@ final class HardeningTest extends TestCase
 
         self::assertSame('end', end($log), 'no guard may run after the transaction has ended');
         self::assertSame('begin', $log[0]);
-    }
-
-    public function testQuietRefusalDoesNotPayForAnExplanation(): void
-    {
-        $calls = 0;
-        $definition = Definition::builder()
-            ->initial('a')
-            ->states('a', 'b')
-            ->transition(Transition::on('GO', 'a', 'b')->withGuard(static function () use (&$calls): bool {
-                $calls++;
-
-                return false;
-            }))
-            ->build();
-        $machine = new Machine($definition);
-
-        self::assertFalse($machine->sendIfAllowed('GO'));
-        self::assertSame(1, $calls);
-
-        self::assertInstanceOf(GuardRejectedException::class, $machine->tryTransition('GO')->failure);
-        self::assertSame(3, $calls, 'a reported refusal asks the guards once more for the blockers');
     }
 
     public function testSelfLoopRunsHooksButWritesNothing(): void

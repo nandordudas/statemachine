@@ -1,13 +1,10 @@
 name: CI
 
-# Builds and verifies both Composer packages of this repository:
-#   - nandordudas/state-machine 2.x (branch `main`,  PHP 8.5+)
-#   - nandordudas/state-machine 1.x (branch `php72`, PHP 7.2+)
-# A push or pull request verifies both lines: its own commit for the line it targets, the other branch as is.
+# Verifies nandordudas/state-machine (PHP 8.5+) and builds its package archive.
 
 on:
   push:
-    branches: [main, php72]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -20,11 +17,11 @@ concurrency:
 
 jobs:
   package:
-    name: ${{ matrix.package }} (PHP ${{ matrix.php }})
+    name: state-machine (PHP 8.5)
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
-      # Real database for tests/Integration (the 1.x job ignores it; SQLite needs no service).
+      # Real database for tests/Integration (SQLite needs no service).
       mysql:
         image: mysql:9
         env:
@@ -37,27 +34,12 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - package: state-machine-2.x
-            ref: main
-            php: '8.5'
-            db: true
-          - package: state-machine-1.x
-            ref: php72
-            php: '7.2'
     steps:
-      # The line this run is about (push to it, or a pull request into it) tests the triggering commit;
-      # the other line is checked out from its branch so both packages stay verified.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ ((github.base_ref || github.ref_name) == 'php72') != (matrix.ref == 'php72') && matrix.ref || '' }}
 
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
-          php-version: ${{ matrix.php }}
+          php-version: '8.5'
           extensions: pdo_mysql, pdo_sqlite
           coverage: none
           tools: composer:v2
@@ -96,7 +78,7 @@ jobs:
 
       # The same tests again on MySQL: row locks, affected-rows semantics and real transactions.
       - name: composer test (MySQL)
-        if: ${{ !cancelled() && matrix.db && hashFiles('tests/Integration/OrderRowTest.php') != '' }}
+        if: ${{ !cancelled() }}
         env:
           DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=state_machine
           DB_USER: root
@@ -110,8 +92,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           php -d zend.assertions=-1 bench/run.php 50000 | tee "$RUNNER_TEMP/head.txt"
-          # Compare only with this job's own line (a pull request into php72 is not measured against main).
-          [ "$BASE_REF" = "${{ matrix.ref }}" ] || exit 0
+          [ -n "$BASE_REF" ] || exit 0
           git fetch --quiet --depth=1 origin "$BASE_REF"
           git worktree add --quiet "$RUNNER_TEMP/base" FETCH_HEAD
           cp -r vendor "$RUNNER_TEMP/base/"
@@ -121,10 +102,10 @@ jobs:
           php bench/compare.php "$RUNNER_TEMP/base.txt" "$RUNNER_TEMP/head.txt"
 
       - name: Build package archive
-        run: composer archive --format=zip --dir=dist --file=${{ matrix.package }}
+        run: composer archive --format=zip --dir=dist --file=state-machine
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.package }}
-          path: dist/${{ matrix.package }}.zip
+          name: state-machine
+          path: dist/state-machine.zip
           if-no-files-found: error

@@ -37,13 +37,7 @@ final readonly class Transition
     /** @var list<Hook> */
     public array $after;
 
-    /** @var list<Hook> run when the transition is aborted after its `before` hooks started */
-    public array $abort;
-
-    /**
-     * @var array<string, mixed> free-form data for UIs, guards and diagrams. Known keys: `label` (shown in
-     *      diagrams) and `blocked` (the message of a guard that refuses without explaining why).
-     */
+    /** @var array<string, mixed> free-form data for UIs, guards and hooks; a `label` is shown in diagrams */
     public array $meta;
 
     /**
@@ -51,8 +45,6 @@ final readonly class Transition
      * @param array<Guard|callable(TransitionContext): bool> $guards all must allow the transition
      * @param array<Hook|callable(TransitionContext): mixed> $before run before the state changes; throwing aborts the transition
      * @param array<Hook|callable(TransitionContext): mixed> $after run once the new state is stored
-     * @param array<Hook|callable(TransitionContext): mixed> $abort run when a `before`/`onExit` hook threw or the
-     *                                                             write lost a race: undo their side effects here
      * @param array<string, mixed> $meta see {@see $meta}
      */
     public function __construct(
@@ -62,7 +54,6 @@ final readonly class Transition
         array $guards = [],
         array $before = [],
         array $after = [],
-        array $abort = [],
         array $meta = [],
     ) {
         $this->event = Name::of($event);
@@ -79,7 +70,6 @@ final readonly class Transition
         $this->guards = array_map(ClosureGuard::wrap(...), array_values($guards));
         $this->before = array_map(ClosureHook::wrap(...), array_values($before));
         $this->after = array_map(ClosureHook::wrap(...), array_values($after));
-        $this->abort = array_map(ClosureHook::wrap(...), array_values($abort));
         $this->meta = $meta;
     }
 
@@ -119,18 +109,6 @@ final readonly class Transition
     }
 
     /**
-     * Compensation for side effects of `before`/`onExit` hooks when the transition does not happen after all.
-     * The original failure still propagates (unless an abort hook throws, which replaces it).
-     *
-     * @param Hook|callable(TransitionContext): mixed $hook
-     */
-    #[\NoDiscard]
-    public function withAbort(Hook|callable $hook): self
-    {
-        return clone($this, ['abort' => [...$this->abort, ClosureHook::wrap($hook)]]);
-    }
-
-    /**
      * Adds (or overrides) metadata keys.
      *
      * @param array<string, mixed> $meta
@@ -161,16 +139,7 @@ final readonly class Transition
             array_push($blockers, ...Explain::blockers($guard, $context));
         }
 
-        $message = $this->meta['blocked'] ?? null;
-
-        if (!is_string($message)) {
-            return $blockers;
-        }
-
-        // A guard that gave no reason gets the transition's own message, so guards can stay generic.
-        return array_map(static fn(Blocker $b): Blocker => $b->code === Blocker::GUARD_REJECTED
-            ? new Blocker($b->code, $message, $b->parameters)
-            : $b, $blockers);
+        return $blockers;
     }
 
     public function leavesFrom(string $state): bool

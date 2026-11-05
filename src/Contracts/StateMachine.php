@@ -32,15 +32,9 @@ interface StateMachine
     public function send(string|BackedEnum $event, array $payload = []): static;
 
     /**
-     * Like send(), but returns false instead of throwing when the event is unknown, not allowed
-     * from the current state, or vetoed by guards. Hook and concurrency failures still throw.
-     *
-     * @param array<string, mixed> $payload
-     */
-    public function sendIfAllowed(string|BackedEnum $event, array $payload = []): bool;
-
-    /**
-     * Like sendIfAllowed(), but says why an event was refused.
+     * Like send(), but returns the refusal instead of throwing when the event is unknown, not allowed from the
+     * current state, or vetoed by guards (`->ok()` is false, `->failure` says why). Hook and concurrency failures
+     * still throw.
      *
      * @param array<string, mixed> $payload
      */

@@ -8,6 +8,7 @@ use Dudas\StateMachine\Blocker;
 use Dudas\StateMachine\Definition;
 use Dudas\StateMachine\Exception\ConcurrentTransitionException;
 use Dudas\StateMachine\Exception\GuardRejectedException;
+use Dudas\StateMachine\Guards\Not;
 use Dudas\StateMachine\Machine;
 use Dudas\StateMachine\Tests\Fixtures\MachineRef;
 use Dudas\StateMachine\Transition;
@@ -107,23 +108,19 @@ final class BlockersTest extends TestCase
         self::assertSame(['role', 'admin'], self::codes($machine->blockers('APPROVE', ['role' => 'guest'])));
     }
 
-    public function testAGuardWithoutAReasonGetsTheTransitionsBlockedMessage(): void
+    public function testAGuardWithoutAReasonIsReportedAsAGenericRejection(): void
     {
-        $plain = $this->approval(on('APPROVE', 'review', 'published', guard: static fn(): bool => false));
-        $described = $this->approval(on(
+        $machine = $this->approval(on(
             'APPROVE',
             'review',
             'published',
             guard: [static fn(): bool => false, not(static fn(): bool => true)],
-            meta: ['blocked' => 'This document cannot be approved yet.'],
         ));
 
-        $generic = $plain->blockers('APPROVE');
-        self::assertSame([Blocker::GUARD_REJECTED], self::codes($generic));
-        self::assertSame('closure', $generic[0]->parameters['guard']);
-
-        $messages = array_map(static fn(Blocker $b): string => $b->message, $described->blockers('APPROVE'));
-        self::assertSame(['This document cannot be approved yet.'], array_values(array_unique($messages)));
+        $blockers = $machine->blockers('APPROVE');
+        self::assertSame([Blocker::GUARD_REJECTED, Blocker::GUARD_REJECTED], self::codes($blockers));
+        self::assertSame('closure', $blockers[0]->parameters['guard']);
+        self::assertSame(Not::class, $blockers[1]->parameters['guard']);
     }
 
     public function testUnknownAndNotAllowedEventsAreExplainedToo(): void
