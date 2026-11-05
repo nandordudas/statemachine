@@ -14,7 +14,7 @@ final class VideoState
     public const PAUSED = 'paused';
 
     /** Not a state: only public string constants count. */
-    private const SECRET = 'secret';
+    protected const INTERNAL = 'internal';
 
     /** Not a state either. */
     public const VERSION = 2;
