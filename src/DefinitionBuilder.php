@@ -33,7 +33,6 @@ final class DefinitionBuilder
     /** @var array<string, list<Hook>> */
     private array $onExit = [];
 
-
     public function initial(string|BackedEnum $state): self
     {
         $this->initial = $state;
