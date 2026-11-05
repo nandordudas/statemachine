@@ -31,7 +31,7 @@ final class PropertyStore implements StateStore
 
         $this->target = $target;
         $this->property = new ReflectionProperty($target, $property);
-        if (PHP_VERSION_ID < 80100) {
+        if (version_compare(PHP_VERSION, '8.1.0', '<')) {
             $this->property->setAccessible(true); // a no-op since 8.1 and deprecated in 8.5
         }
     }

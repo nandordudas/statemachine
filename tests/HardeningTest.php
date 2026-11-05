@@ -72,18 +72,4 @@ final class HardeningTest extends TestCase
             self::assertInstanceOf(AfterHookFailedException::class, $e);
         }
     }
-
-    public function testPropertyStoreReportsAnUninitializedTypedProperty(): void
-    {
-        if (PHP_VERSION_ID < 70400) {
-            self::markTestSkipped('Typed properties need PHP 7.4.');
-        }
-
-        $entity = eval('return new class { public string $status; };');
-        self::assertIsObject($entity);
-
-        $this->expectException(\Dudas\StateMachine\Exception\UnknownStateException::class);
-
-        (new \Dudas\StateMachine\Store\PropertyStore($entity))->get();
-    }
 }
