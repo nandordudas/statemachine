@@ -14,7 +14,7 @@ use Throwable;
  * and is not rolled back. Every post-transition hook still ran; the first failure is available as
  * {@see getPrevious()}, all of them in {@see $failures}. Events queued by hooks of this transition are dropped.
  */
-final class AfterHookFailedException extends RuntimeException implements StateMachineException
+final class AfterHookFailedException extends RuntimeException implements TransitionApplied
 {
     /** @var list<Exception> every hook failure, in the order the hooks ran */
     public readonly array $failures;
