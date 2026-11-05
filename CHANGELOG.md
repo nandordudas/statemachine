@@ -3,7 +3,9 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [semver](https://semver.org). Observable
 behaviour (hook order, exception types, concurrency semantics) is part of the API.
 
-## [Unreleased] (3.0.0)
+## [Unreleased]
+
+## [3.0.0] - 2026-11-05
 
 ### Changed (breaking compared to 2.0.0)
 - Events sent from `onEnter`/`after` hooks are queued and applied after the current transition, inside the outer
@@ -52,3 +54,8 @@ Initial release of the PHP 8.5 line.
 
 ## [1.0.0]
 Initial release of the PHP 7.2 line (branch `php72`).
+
+[Unreleased]: https://github.com/nandordudas/statemachine/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/nandordudas/statemachine/compare/v2.0.0...v3.0.0
+[2.0.0]: https://github.com/nandordudas/statemachine/releases/tag/v2.0.0
+[1.0.0]: https://github.com/nandordudas/statemachine/releases/tag/v1.0.0
